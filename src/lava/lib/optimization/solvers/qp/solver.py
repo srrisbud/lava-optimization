@@ -13,6 +13,8 @@ from lava.lib.optimization.solvers.qp.models import (
 import time
 
 # Future: inheritance from OptimizationSolver class
+
+
 class QPSolver:
     """Solve Full QP by connecting two Lava processes, GradDynamics and
     ConstraintCheck
@@ -102,5 +104,5 @@ class QPSolver:
         toc = time.time()
         sol = GradDyn.vars.qp_neuron_state.get()
         GradDyn.stop()
-        print(tic-toc)
+        print(tic - toc)
         return sol

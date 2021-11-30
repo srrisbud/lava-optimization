@@ -32,14 +32,14 @@ class PyCDModel(PyLoihiProcessModel):
     a_out: PyOutPort = LavaPyType(PyOutPort.VEC_DENSE, float)
     weights: np.ndarray = LavaPyType(np.ndarray, float)
     # Profiling
-    synops:  int = LavaPyType(int, np.int32)
+    synops: int = LavaPyType(int, np.int32)
     neurops: int = LavaPyType(int, np.int32)
     spikeops: int = LavaPyType(int, np.int32)
 
     def run_spk(self):
         s_in = self.s_in.recv()
         # process behavior: matrix multiplication
-        self.synops += np.count_nonzero(self.weights[:,s_in.nonzero()])
+        self.synops += np.count_nonzero(self.weights[:, s_in.nonzero()])
         a_out = self.weights @ s_in
         self.spikeops += np.count_nonzero(a_out)
         self.a_out.send(a_out)
@@ -52,7 +52,7 @@ class PyCNeuModel(PyLoihiProcessModel):
     a_out: PyOutPort = LavaPyType(PyOutPort.VEC_DENSE, np.float64)
     thresholds: np.ndarray = LavaPyType(np.ndarray, np.float64)
     # Profiling
-    synops:  int = LavaPyType(int, np.int32)
+    synops: int = LavaPyType(int, np.int32)
     neurops: int = LavaPyType(int, np.int32)
     spikeops: int = LavaPyType(int, np.int32)
 
@@ -60,6 +60,7 @@ class PyCNeuModel(PyLoihiProcessModel):
         s_in = self.s_in.recv()
         # process behavior: constraint violation check
         a_out = (s_in - self.thresholds) * (s_in > self.thresholds)
+        self.neurops += np.count_nonzero(a_out)
         self.spikeops += np.count_nonzero(a_out)
         self.a_out.send(a_out)
 
@@ -71,14 +72,14 @@ class PyQCModel(PyLoihiProcessModel):
     a_out: PyOutPort = LavaPyType(PyOutPort.VEC_DENSE, np.float64)
     weights: np.ndarray = LavaPyType(np.ndarray, np.float64)
     # Profiling
-    synops:  int = LavaPyType(int, np.int32)
+    synops: int = LavaPyType(int, np.int32)
     neurops: int = LavaPyType(int, np.int32)
     spikeops: int = LavaPyType(int, np.int32)
 
     def run_spk(self):
         s_in = self.s_in.recv()
         # process behavior: matrix multiplication
-        self.synops += np.count_nonzero(self.weights[:,s_in.nonzero()])
+        self.synops += np.count_nonzero(self.weights[:, s_in.nonzero()])
         a_out = self.weights @ s_in
         self.spikeops += np.count_nonzero(a_out)
         self.a_out.send(a_out)
@@ -101,12 +102,13 @@ class PySNModel(PyLoihiProcessModel):
     growth_counter: int = LavaPyType(int, np.int32)
 
     # Profiling
-    synops:  int = LavaPyType(int, np.int32)
+    synops: int = LavaPyType(int, np.int32)
     neurops: int = LavaPyType(int, np.int32)
     spikeops: int = LavaPyType(int, np.int32)
 
     def run_spk(self):
         a_out = self.qp_neuron_state
+        self.spikeops += np.count_nonzero(a_out)
         self.a_out_cc.send(a_out)
         self.a_out_qc.send(a_out)
 
@@ -126,9 +128,11 @@ class PySNModel(PyLoihiProcessModel):
             self.growth_counter = np.zeros(self.growth_counter.shape)
 
         # process behavior: gradient update
-        self.qp_neuron_state += (
+        curr_state = (
             -self.alpha * (s_in_qc + self.grad_bias) - self.beta * s_in_cn
         )
+        self.qp_neuron_state += curr_state
+        self.neurops += np.count_nonzero(curr_state)
 
 
 @implements(proc=ConstraintNormals, protocol=LoihiProtocol)
@@ -139,14 +143,14 @@ class PyCNorModel(PyLoihiProcessModel):
     weights: np.ndarray = LavaPyType(np.ndarray, np.float64)
 
     # Profiling
-    synops:  int = LavaPyType(int, np.int32)
+    synops: int = LavaPyType(int, np.int32)
     neurops: int = LavaPyType(int, np.int32)
     spikeops: int = LavaPyType(int, np.int32)
 
     def run_spk(self):
         s_in = self.s_in.recv()
         # process behavior: matrix multiplication
-        self.synops += np.count_nonzero(self.weights[:,s_in.nonzero()])
+        self.synops += np.count_nonzero(self.weights[:, s_in.nonzero()])
         a_out = self.weights @ s_in
         self.spikeops += np.count_nonzero(a_out)
         self.a_out.send(a_out)
@@ -162,11 +166,11 @@ class SubCCModel(AbstractSubProcessModel):
     a_out: PyOutPort = LavaPyType(PyOutPort.VEC_DENSE, np.float64)
 
     # profiling
-    cNeur_synops:  int = LavaPyType(int, np.int32)
+    cNeur_synops: int = LavaPyType(int, np.int32)
     cNeur_neurops: int = LavaPyType(int, np.int32)
     cNeur_spikeops: int = LavaPyType(int, np.int32)
 
-    cD_synops:  int = LavaPyType(int, np.int32)
+    cD_synops: int = LavaPyType(int, np.int32)
     cD_neurops: int = LavaPyType(int, np.int32)
     cD_spikeops: int = LavaPyType(int, np.int32)
 
@@ -197,13 +201,15 @@ class SubCCModel(AbstractSubProcessModel):
         )
         proc.vars.constraint_bias.alias(self.constraintNeurons.vars.thresholds)
 
-        #profiling
+        # profiling
         proc.vars.cNeur_synops.alias(self.constraintNeurons.vars.synops)
         proc.vars.cNeur_neurops.alias(self.constraintNeurons.vars.neurops)
         proc.vars.cNeur_spikeops.alias(self.constraintNeurons.vars.spikeops)
         proc.vars.cD_synops.alias(self.constraintDirections.vars.synops)
         proc.vars.cD_neurops.alias(self.constraintDirections.vars.neurops)
         proc.vars.cD_spikeops.alias(self.constraintDirections.vars.spikeops)
+
+
 @implements(proc=GradientDynamics, protocol=LoihiProtocol)
 class SubGDModel(AbstractSubProcessModel):
     """Implement gradientDynamics Process behavior via sub Processes."""
@@ -223,15 +229,15 @@ class SubGDModel(AbstractSubProcessModel):
     a_out: PyOutPort = LavaPyType(PyOutPort.VEC_DENSE, np.float64)
 
     # profiling
-    cN_synops:  int = LavaPyType(int, np.int32)
+    cN_synops: int = LavaPyType(int, np.int32)
     cN_neurops: int = LavaPyType(int, np.int32)
     cN_spikeops: int = LavaPyType(int, np.int32)
 
-    qC_synops:  int = LavaPyType(int, np.int32)
+    qC_synops: int = LavaPyType(int, np.int32)
     qC_neurops: int = LavaPyType(int, np.int32)
     qC_spikeops: int = LavaPyType(int, np.int32)
 
-    sN_synops:  int = LavaPyType(int, np.int32)
+    sN_synops: int = LavaPyType(int, np.int32)
     sN_neurops: int = LavaPyType(int, np.int32)
     sN_spikeops: int = LavaPyType(int, np.int32)
 
@@ -284,8 +290,7 @@ class SubGDModel(AbstractSubProcessModel):
         proc.vars.alpha_decay_schedule.alias(self.sN.vars.alpha_decay_schedule)
         proc.vars.beta_growth_schedule.alias(self.sN.vars.beta_growth_schedule)
 
-
-        #profiling
+        # profiling
         proc.vars.cN_synops.alias(self.cN.vars.synops)
         proc.vars.cN_neurops.alias(self.cN.vars.neurops)
         proc.vars.cN_spikeops.alias(self.cN.vars.spikeops)

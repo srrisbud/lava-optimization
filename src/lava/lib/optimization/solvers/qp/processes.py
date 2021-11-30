@@ -36,9 +36,11 @@ class ConstraintDirections(AbstractProcess):
         )
 
         # Profiling
-        self.synops = Var(shape=(1,1), init=0)
-        self.neurops = Var(shape=(1,1), init=0)
-        self.spikeops = Var(shape=(1,1), init=0)
+        self.synops = Var(shape=(1, 1), init=0)
+        self.neurops = Var(shape=(1, 1), init=0)
+        self.spikeops = Var(shape=(1, 1), init=0)
+
+
 class ConstraintNeurons(AbstractProcess):
     """Process to check the violation of the linear constraints of the QP. A
     graded spike corresponding to the violated constraint is sent from the out
@@ -67,9 +69,10 @@ class ConstraintNeurons(AbstractProcess):
         self.thresholds = Var(shape=shape, init=kwargs.pop("thresholds", 0))
 
         # Profiling
-        self.synops = Var(shape=(1,1), init=0)
-        self.neurops = Var(shape=(1,1), init=0)
-        self.spikeops = Var(shape=(1,1), init=0)
+        self.synops = Var(shape=(1, 1), init=0)
+        self.neurops = Var(shape=(1, 1), init=0)
+        self.spikeops = Var(shape=(1, 1), init=0)
+
 
 class QuadraticConnectivity(AbstractProcess):
     """The connections that define the Hessian of the quadratic cost function
@@ -96,9 +99,11 @@ class QuadraticConnectivity(AbstractProcess):
         self.weights = Var(shape=shape, init=kwargs.pop("hessian", 0))
 
         # Profiling
-        self.synops = Var(shape=(1,1), init=0)
-        self.neurops = Var(shape=(1,1), init=0)
-        self.spikeops = Var(shape=(1,1), init=0)
+        self.synops = Var(shape=(1, 1), init=0)
+        self.neurops = Var(shape=(1, 1), init=0)
+        self.spikeops = Var(shape=(1, 1), init=0)
+
+
 class SolutionNeurons(AbstractProcess):
     """The neurons that evolve according to the constraint-corrected gradient
     dynamics.
@@ -162,9 +167,10 @@ class SolutionNeurons(AbstractProcess):
         self.growth_counter = Var(shape=(1, 1), init=0)
 
         # Profiling
-        self.synops = Var(shape=(1,1), init=0)
-        self.neurops = Var(shape=(1,1), init=0)
-        self.spikeops = Var(shape=(1,1), init=0)
+        self.synops = Var(shape=(1, 1), init=0)
+        self.neurops = Var(shape=(1, 1), init=0)
+        self.spikeops = Var(shape=(1, 1), init=0)
+
 
 class ConstraintNormals(AbstractProcess):
     """Connections influencing the gradient dynamics when constraints are
@@ -195,9 +201,10 @@ class ConstraintNormals(AbstractProcess):
         )
 
         # Profiling
-        self.synops = Var(shape=(1,1), init=0)
-        self.neurops = Var(shape=(1,1), init=0)
-        self.spikeops = Var(shape=(1,1), init=0)
+        self.synops = Var(shape=(1, 1), init=0)
+        self.neurops = Var(shape=(1, 1), init=0)
+        self.spikeops = Var(shape=(1, 1), init=0)
+
 
 class ConstraintCheck(AbstractProcess):
     """Check if linear constraints (equality/inequality) are violated for the
@@ -232,13 +239,14 @@ class ConstraintCheck(AbstractProcess):
         self.a_out = OutPort(shape=(shape[0], 1))
 
         # Profiling
-        self.cNeur_synops = Var(shape=(1,1), init=0)
-        self.cNeur_neurops = Var(shape=(1,1), init=0)
-        self.cNeur_spikeops = Var(shape=(1,1), init=0)
+        self.cNeur_synops = Var(shape=(1, 1), init=0)
+        self.cNeur_neurops = Var(shape=(1, 1), init=0)
+        self.cNeur_spikeops = Var(shape=(1, 1), init=0)
 
-        self.cD_synops = Var(shape=(1,1), init=0)
-        self.cD_neurops = Var(shape=(1,1), init=0)
-        self.cD_spikeops = Var(shape=(1,1), init=0)
+        self.cD_synops = Var(shape=(1, 1), init=0)
+        self.cD_neurops = Var(shape=(1, 1), init=0)
+        self.cD_spikeops = Var(shape=(1, 1), init=0)
+
 
 class GradientDynamics(AbstractProcess):
     """Perform gradient descent with constraint correction to converge at the
@@ -314,14 +322,14 @@ class GradientDynamics(AbstractProcess):
         self.a_out = OutPort(shape=(shape_hess[0], 1))
 
         # Profiling
-        self.cN_synops = Var(shape=(1,1), init=0)
-        self.cN_neurops = Var(shape=(1,1), init=0)
-        self.cN_spikeops = Var(shape=(1,1), init=0)
+        self.cN_synops = Var(shape=(1, 1), init=0)
+        self.cN_neurops = Var(shape=(1, 1), init=0)
+        self.cN_spikeops = Var(shape=(1, 1), init=0)
 
-        self.qC_synops = Var(shape=(1,1), init=0)
-        self.qC_neurops = Var(shape=(1,1), init=0)
-        self.qC_spikeops = Var(shape=(1,1), init=0)
+        self.qC_synops = Var(shape=(1, 1), init=0)
+        self.qC_neurops = Var(shape=(1, 1), init=0)
+        self.qC_spikeops = Var(shape=(1, 1), init=0)
 
-        self.sN_synops = Var(shape=(1,1), init=0)
-        self.sN_neurops = Var(shape=(1,1), init=0)
-        self.sN_spikeops = Var(shape=(1,1), init=0)
+        self.sN_synops = Var(shape=(1, 1), init=0)
+        self.sN_neurops = Var(shape=(1, 1), init=0)
+        self.sN_spikeops = Var(shape=(1, 1), init=0)
