@@ -23,6 +23,7 @@ from lava.lib.optimization.solvers.qp.processes import (
     SolutionNeurons,
     GradientDynamics,
     SigmaDeltaSolutionNeurons,
+    SigmaNeurons,
 )
 
 
@@ -42,6 +43,27 @@ class PyCDModel(PyLoihiProcessModel):
         # process behavior: matrix multiplication
         self.synops += np.count_nonzero(self.weights[:, s_in.nonzero()])
         a_out = self.weights @ s_in
+        self.a_out.send(a_out)
+
+
+@implements(proc=SigmaNeurons, protocol=LoihiProtocol)
+@requires(CPU)
+class PySigNeurModel(PyLoihiProcessModel):
+    s_in: PyInPort = LavaPyType(PyInPort.VEC_DENSE, np.float64)
+    a_out: PyOutPort = LavaPyType(PyOutPort.VEC_DENSE, np.float64)
+    x_internal: np.ndarray = LavaPyType(np.ndarray, np.float64)
+    # Profiling
+    synops: int = LavaPyType(int, np.int32)
+    neurops: int = LavaPyType(int, np.int32)
+    spikeops: int = LavaPyType(int, np.int32)
+
+    def run_spk(self):
+        s_in = self.s_in.recv()
+        # process behavior: constraint violation check
+        self.x_internal += s_in
+        a_out = self.x_internal
+        self.neurops += np.count_nonzero(a_out)
+        self.spikeops += np.count_nonzero(a_out)
         self.a_out.send(a_out)
 
 

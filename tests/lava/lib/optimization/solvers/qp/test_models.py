@@ -26,6 +26,7 @@ from lava.lib.optimization.solvers.qp.models import (
     QuadraticConnectivity,
     GradientDynamics,
     SigmaDeltaSolutionNeurons,
+    SigmaNeurons,
 )
 
 
@@ -120,6 +121,30 @@ class TestModelsFloatingPoint(unittest.TestCase):
             True,
         )
         in_spike_process.stop()
+
+    def test_model_sigma_neurons(self):
+        """test behavior of sigma (accumulator) neuron process
+        (vector-vector addition)
+        """
+        inp_bias = np.array([[2, 4, 6]]).T
+        process = SigmaNeurons(shape=inp_bias.shape, x_int_init=inp_bias)
+        input_spike = np.array([[1], [5], [2]])
+        in_spike_process = InSpikeSetProcess(
+            in_shape=input_spike.shape, spike_in=input_spike
+        )
+        out_spike_process = OutProbeProcess(out_shape=process.a_out.shape)
+
+        in_spike_process.a_out.connect(process.s_in)
+        process.a_out.connect(out_spike_process.s_in)
+
+        in_spike_process.run(
+            condition=RunSteps(num_steps=2), run_cfg=Loihi1SimCfg()
+        )
+        val = out_spike_process.vars.spike_out.get()
+        in_spike_process.stop()
+
+        # testing accumulation operation
+        self.assertEqual(np.all(val == (2 * input_spike + inp_bias)), True)
 
     def test_model_constraint_neurons(self):
         """test behavior of constraint directions process

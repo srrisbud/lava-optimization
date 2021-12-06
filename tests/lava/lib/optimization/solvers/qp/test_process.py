@@ -15,6 +15,7 @@ from lava.lib.optimization.solvers.qp.processes import (
     QuadraticConnectivity,
     GradientDynamics,
     SigmaDeltaSolutionNeurons,
+    SigmaNeurons,
 )
 
 
@@ -40,6 +41,18 @@ class TestProcessesFloatingPoint(unittest.TestCase):
         )
         self.assertEqual(
             np.all(process.a_out.shape == (weights.shape[0], 1)), True
+        )
+
+    def test_process_sigma_neurons(self):
+        process = SigmaNeurons()
+        self.assertEqual(process.vars.x_internal.get() == 0, True)
+        inp_bias = np.array([[2, 4, 6]]).T
+        process = SigmaNeurons(shape=inp_bias.shape, x_int_init=inp_bias)
+        self.assertEqual(
+            np.all(process.vars.x_internal.get() == inp_bias), True
+        )
+        self.assertEqual(
+            np.all(process.s_in.shape == (inp_bias.shape[0], 1)), True
         )
 
     def test_process_constraint_neurons(self):

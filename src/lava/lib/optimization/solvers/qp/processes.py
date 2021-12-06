@@ -41,6 +41,35 @@ class ConstraintDirections(AbstractProcess):
         self.spikeops = Var(shape=(1, 1), init=0)
 
 
+class SigmaNeurons(AbstractProcess):
+    """Process to accumate spikes into a state variable before being fed to
+    another process.
+    Realizes the following abstract behavior:
+    a_out = self.x_internal + s_in
+
+    Intialize the constraintNeurons Process.
+
+        Kwargs:
+        ------
+        shape : int tuple, optional
+            Define the shape of the thresholds vector. Defaults to (1,1).
+        x_int_init : 1-D np.array, optional
+            initial value of internal sigma neurons
+    """
+
+    def __init__(self, **kwargs: ty.Any):
+        super().__init__(**kwargs)
+        shape = kwargs.get("shape", (1, 1))
+        self.s_in = InPort(shape=(shape[0], 1))
+        self.a_out = OutPort(shape=(shape[0], 1))
+        self.x_internal = Var(shape=shape, init=kwargs.pop("x_int_init", 0))
+
+        # Profiling
+        self.synops = Var(shape=(1, 1), init=0)
+        self.neurops = Var(shape=(1, 1), init=0)
+        self.spikeops = Var(shape=(1, 1), init=0)
+
+
 class ConstraintNeurons(AbstractProcess):
     """Process to check the violation of the linear constraints of the QP. A
     graded spike corresponding to the violated constraint is sent from the out
@@ -177,6 +206,7 @@ class SigmaDeltaSolutionNeurons(AbstractProcess):
     dynamic along with sigma-delta coding
     Implements the abstract behaviour
     qp_neuron_state += (-alpha * (s_in_qc + grad_bias) - beta * s_in_cn)
+    Send spike if (-alpha * (s_in_qc + grad_bias) - beta * s_in_cn) > threshold
 
     Intialize the solutionNeurons process.
 
