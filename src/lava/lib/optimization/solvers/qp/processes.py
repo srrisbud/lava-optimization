@@ -324,11 +324,15 @@ class ConstraintCheck(AbstractProcess):
         Kwargs:
         ------
         constraint_matrix : 1-D  or 2-D np.array, optional
-        The value of the constraint matrix. This is 'A' in the linear
-        constraints.
+            The value of the constraint matrix. This is 'A' in the linear
+            constraints.
         constraint_bias : 1-D np.array, optional
             The value of the constraint bias. This is 'k' in the linear
             constraints.
+        sparse: bool, optional
+            Sparse is true when using sparsifying neuron-model eg. sigma-delta
+        x_int_init : 1-D np.array, optional
+            initial value of internal sigma neurons
     """
 
     def __init__(self, **kwargs: ty.Any):
@@ -340,6 +344,10 @@ class ConstraintCheck(AbstractProcess):
         self.constraint_bias = Var(
             shape=(shape[0], 1), init=kwargs.pop("constraint_bias", 0)
         )
+        self.x_internal = Var(
+            shape=(shape[1], 1), init=kwargs.pop("x_int_init", 0)
+        )
+        self.sparse = Var(shape=(1, 1), init=kwargs.pop("sparse", False))
         self.a_out = OutPort(shape=(shape[0], 1))
 
         # Profiling

@@ -239,6 +239,8 @@ class SubCCModel(AbstractSubProcessModel):
     s_in: PyInPort = LavaPyType(PyInPort.VEC_DENSE, np.float64)
     constraint_matrix: np.ndarray = LavaPyType(np.ndarray, np.float64)
     constraint_bias: np.ndarray = LavaPyType(np.ndarray, np.float64)
+    x_internal: np.ndarray = LavaPyType(np.ndarray, np.float64)
+    sparse: bool = LavaPyType(bool, bool)
     a_out: PyOutPort = LavaPyType(PyOutPort.VEC_DENSE, np.float64)
 
     # profiling
@@ -254,6 +256,8 @@ class SubCCModel(AbstractSubProcessModel):
         """Builds sub Process structure of the Process."""
         constraint_matrix = proc.init_args.get("constraint_matrix", 0)
         constraint_bias = proc.init_args.get("constraint_bias", 0)
+        x_int_init = proc.init_args.get("x_int_init", 0)
+        sparse = proc.init_args.get("sparse", False)
 
         # Initialize subprocesses
         self.constraintDirections = ConstraintDirections(
@@ -264,8 +268,22 @@ class SubCCModel(AbstractSubProcessModel):
             shape=constraint_bias.shape, thresholds=constraint_bias
         )
 
-        # connect subprocesses to obtain required process behavior
-        proc.in_ports.s_in.connect(self.constraintDirections.in_ports.s_in)
+        if sparse == True:
+            self.sigmaNeurons = SigmaNeurons(
+                shape=(constraint_matrix.shape[1], 1), x_int_init=x_int_init
+            )
+
+            proc.vars.x_internal.alias(self.sigmaNeurons.vars.x_internal)
+            # connect subprocesses to obtain required process behavior
+            proc.in_ports.s_in.connect(self.sigmaNeurons.in_ports.s_in)
+            self.sigmaNeurons.out_ports.a_out.connect(
+                self.constraintDirections.in_ports.s_in
+            )
+
+        else:
+            proc.in_ports.s_in.connect(self.constraintDirections.in_ports.s_in)
+
+        # remaining procesess to connect irrespective of sparsity
         self.constraintDirections.out_ports.a_out.connect(
             self.constraintNeurons.in_ports.s_in
         )

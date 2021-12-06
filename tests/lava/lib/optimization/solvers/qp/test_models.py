@@ -373,6 +373,40 @@ class TestModelsFloatingPoint(unittest.TestCase):
         )
         in_spike_process.stop()
 
+        # test constraint check in sparse mode
+        x_init = np.array([[0.2, 0.4, 0.2]]).T
+        process = ConstraintCheck(
+            constraint_matrix=A,
+            constraint_bias=k,
+            sparse=True,
+            x_int_init=x_init,
+        )
+        input_spike = np.array([[1], [2], [1]])
+        in_spike_process = InSpikeSetProcess(
+            in_shape=input_spike.shape, spike_in=input_spike
+        )
+        out_spike_process = OutProbeProcess(out_shape=process.a_out.shape)
+
+        in_spike_process.a_out.connect(process.s_in)
+        process.a_out.connect(out_spike_process.s_in)
+
+        in_spike_process.run(
+            condition=RunSteps(num_steps=1),
+            run_cfg=Loihi1SimCfg(select_sub_proc_model=True),
+        )
+        val = out_spike_process.vars.spike_out.get()
+        in_spike_process.stop()
+        self.assertEqual(
+            np.all(
+                val
+                == (
+                    (A @ (input_spike + x_init) - k)
+                    * (A @ (input_spike + x_init) > k)
+                )
+            ),
+            True,
+        )
+
     def test_model_gradient_dynamics(self):
         """test behavior of GradientDynamics process
         -alpha*(Q@x_init + p)- beta*A_T@graded_constraint_spike

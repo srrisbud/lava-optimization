@@ -196,6 +196,22 @@ class TestProcessesFloatingPoint(unittest.TestCase):
         self.assertEqual(np.all(process.s_in.shape == (A.shape[1], 1)), True)
         self.assertEqual(np.all(process.a_out.shape == (A.shape[0], 1)), True)
 
+        # testing sparse input constraint check
+        x_init = np.array([[0.2, 0.4, 0.2]]).T
+        process = ConstraintCheck(
+            constraint_matrix=A,
+            constraint_bias=b,
+            sparse=True,
+            x_int_init=x_init,
+        )
+        self.assertEqual(
+            np.all(process.vars.constraint_matrix.get() == A), True
+        )
+        self.assertEqual(np.all(process.vars.constraint_bias.get() == b), True)
+        self.assertEqual(np.all(process.vars.x_internal.get() == x_init), True)
+        self.assertEqual(np.all(process.s_in.shape == (A.shape[1], 1)), True)
+        self.assertEqual(np.all(process.a_out.shape == (A.shape[0], 1)), True)
+
     def test_process_gradient_dynamics(self):
         P = np.array([[2, 43, 2], [43, 3, 4], [2, 4, 1]])
 
