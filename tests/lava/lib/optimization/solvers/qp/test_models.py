@@ -25,6 +25,7 @@ from lava.lib.optimization.solvers.qp.models import (
     ConstraintDirections,
     QuadraticConnectivity,
     GradientDynamics,
+    SigmaDeltaSolutionNeurons,
 )
 
 
@@ -201,6 +202,65 @@ class TestModelsFloatingPoint(unittest.TestCase):
             True,
         )
         in_spike_cn_process.stop()
+
+    def test_model_sigma_delta_solution_neurons(self):
+        """test behavior of SigmaDeltaSolutionNeurons process
+        -alpha*(input_spike_1 + p)- beta*input_spike_2
+        """
+        init_sol = np.array([[2, 4, 6, 4, 1]]).T
+        p = np.array([[4, 3, 2, 1, 1]]).T
+        theta, alpha, beta, alpha_d, beta_g = 5, 3, 2, 100, 100
+        process = SigmaDeltaSolutionNeurons(
+            shape=init_sol.shape,
+            qp_neurons_init=init_sol,
+            grad_bias=p,
+            theta=theta,
+            alpha=alpha,
+            beta=beta,
+            alpha_decay_schedule=alpha_d,
+            beta_growth_schedule=beta_g,
+        )
+        input_spike_cn = np.array([[1], [5], [2], [2], [0]])
+        input_spike_qc = np.array([[8], [2], [22], [21], [1]])
+        in_spike_cn_process = InSpikeSetProcess(
+            in_shape=input_spike_cn.shape, spike_in=input_spike_cn
+        )
+        in_spike_qc_process = InSpikeSetProcess(
+            in_shape=input_spike_qc.shape, spike_in=input_spike_qc
+        )
+        out_spike_cc_process = OutProbeProcess(
+            out_shape=process.a_out_cc.shape
+        )
+        out_spike_qc_process = OutProbeProcess(
+            out_shape=process.a_out_qc.shape
+        )
+
+        in_spike_cn_process.a_out.connect(process.s_in_cn)
+        in_spike_qc_process.a_out.connect(process.s_in_qc)
+        process.a_out_cc.connect(out_spike_cc_process.s_in)
+        process.a_out_qc.connect(out_spike_qc_process.s_in)
+
+        # testing for two timesteps because of design of
+        # solution neurons for recurrent connectivity. Nth
+        # state available only at N+1th timestep
+        in_spike_cn_process.run(
+            condition=RunSteps(num_steps=2), run_cfg=Loihi1SimCfg()
+        )
+        val = out_spike_cc_process.vars.spike_out.get()
+        in_spike_cn_process.stop()
+        # prev val changes from zero to init value during the first step as per
+        # process model design
+        prev_val = init_sol
+        curr_val = (
+            init_sol - alpha * (input_spike_qc + p) - beta * input_spike_cn
+        )
+        self.assertEqual(
+            np.all(
+                val
+                == ((curr_val - prev_val) * ((curr_val - prev_val) > theta))
+            ),
+            True,
+        )
 
     def test_model_constraint_normals(self):
         """test behavior of ConstraintNormals process

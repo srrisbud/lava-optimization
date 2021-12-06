@@ -172,6 +172,80 @@ class SolutionNeurons(AbstractProcess):
         self.spikeops = Var(shape=(1, 1), init=0)
 
 
+class SigmaDeltaSolutionNeurons(AbstractProcess):
+    """The neurons that evolve according to the constraint-corrected gradient
+    dynamic along with sigma-delta coding
+    Implements the abstract behaviour
+    qp_neuron_state += (-alpha * (s_in_qc + grad_bias) - beta * s_in_cn)
+
+    Intialize the solutionNeurons process.
+
+        Kwargs:
+        -------
+        shape : int tuple, optional
+            A tuple defining the shape of the qp neurons. Defaults to (1,1).
+        qp_neurons_init : 1-D np.array, optional
+            initial value of qp solution neurons
+        grad_bias : 1-D np.array, optional
+            The bias of the gradient of the QP. This is the value 'p' in the
+            QP definition.
+        theta : 1-D np.array, optional
+            Defines the threshold for sigma-delta spiking. Defaults to 0.
+        alpha : 1-D np.array, optional
+            Defines the learning rate for gradient descent. Defaults to 1.
+        beta : 1-D np.array, optional
+            Defines the learning rate for constraint-checking. Defaults to 1.
+        alpha_decay_schedule : int, optional
+            The number of iterations after which one right shift operation
+            takes place for alpha. Default intialization to a very high value
+            of 10000.
+        beta_growth_schedule : int, optional
+            The number of iterations after which one left shift operation takes
+            place for beta. Default intialization to a very high value of
+            10000.
+    """
+
+    def __init__(self, **kwargs: ty.Any):
+        super().__init__(**kwargs)
+        shape = kwargs.get("shape", (1, 1))
+        # In/outPorts that come from/go to the quadratic connectivity process
+        self.s_in_qc = InPort(shape=(shape[0], 1))
+        self.a_out_qc = OutPort(shape=(shape[0], 1))
+        # In/outPorts that come from/go to the constraint normals process
+        self.s_in_cn = InPort(shape=(shape[0], 1))
+        # OutPort for constraint checking
+        self.a_out_cc = OutPort(shape=(shape[0], 1))
+        self.qp_neuron_state = Var(
+            shape=shape, init=kwargs.pop("qp_neurons_init", np.zeros(shape))
+        )
+        self.prev_qp_neuron_state = Var(shape=shape, init=np.zeros(shape))
+        self.grad_bias = Var(
+            shape=shape, init=kwargs.pop("grad_bias", np.zeros(shape))
+        )
+        self.theta = Var(
+            shape=shape, init=kwargs.pop("theta", np.ones((shape[0], 0)))
+        )
+        self.alpha = Var(
+            shape=shape, init=kwargs.pop("alpha", np.ones((shape[0], 1)))
+        )
+        self.beta = Var(
+            shape=shape, init=kwargs.pop("beta", np.ones((shape[0], 1)))
+        )
+        self.alpha_decay_schedule = Var(
+            shape=(1, 1), init=kwargs.pop("alpha_decay_schedule", 10000)
+        )
+        self.beta_growth_schedule = Var(
+            shape=(1, 1), init=kwargs.pop("beta_growth_schedule", 10000)
+        )
+        self.decay_counter = Var(shape=(1, 1), init=0)
+        self.growth_counter = Var(shape=(1, 1), init=0)
+
+        # Profiling
+        self.synops = Var(shape=(1, 1), init=0)
+        self.neurops = Var(shape=(1, 1), init=0)
+        self.spikeops = Var(shape=(1, 1), init=0)
+
+
 class ConstraintNormals(AbstractProcess):
     """Connections influencing the gradient dynamics when constraints are
     violated.

@@ -14,6 +14,7 @@ from lava.lib.optimization.solvers.qp.processes import (
     ConstraintDirections,
     QuadraticConnectivity,
     GradientDynamics,
+    SigmaDeltaSolutionNeurons,
 )
 
 
@@ -70,6 +71,55 @@ class TestProcessesFloatingPoint(unittest.TestCase):
             np.all(process.vars.qp_neuron_state.get() == init_sol), True
         )
         self.assertEqual(np.all(process.vars.grad_bias.get() == p), True)
+        self.assertEqual(np.all(process.vars.alpha.get() == alpha), True)
+        self.assertEqual(np.all(process.vars.beta.get() == beta), True)
+        self.assertEqual(
+            process.vars.alpha_decay_schedule.get() == alpha_d, True
+        )
+        self.assertEqual(
+            process.vars.beta_growth_schedule.get() == beta_g, True
+        )
+        self.assertEqual(process.vars.decay_counter.get() == 0, True)
+        self.assertEqual(process.vars.growth_counter.get() == 0, True)
+        self.assertEqual(
+            np.all(process.s_in_qc.shape == (p.shape[0], 1)), True
+        )
+        self.assertEqual(
+            np.all(process.s_in_cn.shape == (p.shape[0], 1)), True
+        )
+        self.assertEqual(
+            np.all(process.a_out_qc.shape == (p.shape[0], 1)), True
+        )
+        self.assertEqual(
+            np.all(process.a_out_cc.shape == (p.shape[0], 1)), True
+        )
+
+    def test_process_sigma_delta_solution_neurons(self):
+        init_sol = np.array([[2, 4, 6, 4, 1]]).T
+        p = np.array([[4, 3, 2, 1, 1]]).T
+        theta, alpha, beta, alpha_d, beta_g = 0.1, 3, 2, 100, 100
+        process = SigmaDeltaSolutionNeurons(
+            shape=init_sol.shape,
+            qp_neurons_init=init_sol,
+            grad_bias=p,
+            theta=theta,
+            alpha=alpha,
+            beta=beta,
+            alpha_decay_schedule=alpha_d,
+            beta_growth_schedule=beta_g,
+        )
+        self.assertEqual(
+            np.all(process.vars.qp_neuron_state.get() == init_sol), True
+        )
+        self.assertEqual(
+            np.all(
+                process.vars.prev_qp_neuron_state.get()
+                == np.zeros(init_sol.shape)
+            ),
+            True,
+        )
+        self.assertEqual(np.all(process.vars.grad_bias.get() == p), True)
+        self.assertEqual(np.all(process.vars.theta.get() == theta), True)
         self.assertEqual(np.all(process.vars.alpha.get() == alpha), True)
         self.assertEqual(np.all(process.vars.beta.get() == beta), True)
         self.assertEqual(

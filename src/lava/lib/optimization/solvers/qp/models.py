@@ -22,6 +22,7 @@ from lava.lib.optimization.solvers.qp.processes import (
     QuadraticConnectivity,
     SolutionNeurons,
     GradientDynamics,
+    SigmaDeltaSolutionNeurons,
 )
 
 
@@ -41,7 +42,6 @@ class PyCDModel(PyLoihiProcessModel):
         # process behavior: matrix multiplication
         self.synops += np.count_nonzero(self.weights[:, s_in.nonzero()])
         a_out = self.weights @ s_in
-        self.spikeops += np.count_nonzero(a_out)
         self.a_out.send(a_out)
 
 
@@ -81,7 +81,6 @@ class PyQCModel(PyLoihiProcessModel):
         # process behavior: matrix multiplication
         self.synops += np.count_nonzero(self.weights[:, s_in.nonzero()])
         a_out = self.weights @ s_in
-        self.spikeops += np.count_nonzero(a_out)
         self.a_out.send(a_out)
 
 
@@ -118,14 +117,14 @@ class PySNModel(PyLoihiProcessModel):
         self.decay_counter += 1
         if self.decay_counter == self.alpha_decay_schedule:
             # TODO: guard against shift overflows in fixed-point
-            self.alpha = np.right_shift(self.alpha, 1)
-            self.decay_counter = np.zeros(self.decay_counter.shape)
+            self.alpha /= 2  # equivalent to right shift operation
+            self.decay_counter = 0
 
         self.growth_counter += 1
         if self.growth_counter == self.beta_growth_schedule:
-            self.beta = np.left_shift(self.beta, 1)
             # TODO: guard against shift overflows in fixed-point
-            self.growth_counter = np.zeros(self.growth_counter.shape)
+            self.beta *= 2  # equivalent to left shift operation
+            self.growth_counter = 0
 
         # process behavior: gradient update
         curr_state = (
@@ -133,6 +132,62 @@ class PySNModel(PyLoihiProcessModel):
         )
         self.qp_neuron_state += curr_state
         self.neurops += np.count_nonzero(curr_state)
+
+
+@implements(proc=SigmaDeltaSolutionNeurons, protocol=LoihiProtocol)
+@requires(CPU)
+class PySDSNModel(PyLoihiProcessModel):
+    s_in_qc: PyInPort = LavaPyType(PyInPort.VEC_DENSE, np.float64)
+    a_out_qc: PyOutPort = LavaPyType(PyOutPort.VEC_DENSE, np.float64)
+    s_in_cn: PyInPort = LavaPyType(PyInPort.VEC_DENSE, np.float64)
+    a_out_cc: PyOutPort = LavaPyType(PyOutPort.VEC_DENSE, np.float64)
+    qp_neuron_state: np.ndarray = LavaPyType(np.ndarray, np.float64)
+    prev_qp_neuron_state: np.ndarray = LavaPyType(np.ndarray, np.float64)
+    grad_bias: np.ndarray = LavaPyType(np.ndarray, np.float64)
+    theta: np.ndarray = LavaPyType(np.ndarray, np.float64)
+    alpha: np.ndarray = LavaPyType(np.ndarray, np.float64)
+    beta: np.ndarray = LavaPyType(np.ndarray, np.float64)
+    alpha_decay_schedule: int = LavaPyType(int, np.int32)
+    beta_growth_schedule: int = LavaPyType(int, np.int32)
+    decay_counter: int = LavaPyType(int, np.int32)
+    growth_counter: int = LavaPyType(int, np.int32)
+
+    # Profiling
+    synops: int = LavaPyType(int, np.int32)
+    neurops: int = LavaPyType(int, np.int32)
+    spikeops: int = LavaPyType(int, np.int32)
+
+    def run_spk(self):
+        # Delta Operation
+        delta_state = self.qp_neuron_state - self.prev_qp_neuron_state
+        a_out = delta_state * ((delta_state) > self.theta)
+        self.spikeops += np.count_nonzero(a_out)
+        self.a_out_cc.send(a_out)
+        self.a_out_qc.send(a_out)
+
+        s_in_qc = self.s_in_qc.recv()
+        s_in_cn = self.s_in_cn.recv()
+
+        self.decay_counter += 1
+        if self.decay_counter == self.alpha_decay_schedule:
+            # TODO: guard against shift overflows in fixed-point
+            self.alpha /= 2  # equivalent to right shift operation
+            self.decay_counter = 0
+
+        self.growth_counter += 1
+        if self.growth_counter == self.beta_growth_schedule:
+            # TODO: guard against shift overflows in fixed-point
+            self.beta *= 2  # equivalent to left shift operation
+            self.growth_counter = 0
+
+        # process behavior: gradient update
+        self.prev_qp_neuron_state = self.qp_neuron_state
+        state_update = (
+            -self.alpha * (s_in_qc + self.grad_bias) - self.beta * s_in_cn
+        )
+
+        self.qp_neuron_state += state_update
+        self.neurops += np.count_nonzero(state_update)
 
 
 @implements(proc=ConstraintNormals, protocol=LoihiProtocol)
@@ -152,7 +207,6 @@ class PyCNorModel(PyLoihiProcessModel):
         # process behavior: matrix multiplication
         self.synops += np.count_nonzero(self.weights[:, s_in.nonzero()])
         a_out = self.weights @ s_in
-        self.spikeops += np.count_nonzero(a_out)
         self.a_out.send(a_out)
 
 
