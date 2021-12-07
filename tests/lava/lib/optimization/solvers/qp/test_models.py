@@ -282,7 +282,7 @@ class TestModelsFloatingPoint(unittest.TestCase):
         self.assertEqual(
             np.all(
                 val
-                == ((curr_val - prev_val) * ((curr_val - prev_val) > theta))
+                == ((curr_val - prev_val) * (np.abs(curr_val - prev_val) > theta))
             ),
             True,
         )
@@ -457,7 +457,48 @@ class TestModelsFloatingPoint(unittest.TestCase):
             True,
         )
         in_spike_process.stop()
+        
+        ## test sparse gradient dynamics 
+        theta = 0.2
+        process = GradientDynamics(
+            hessian=Q,
+            constraint_matrix_T=A_T,
+            qp_neurons_init=init_sol,
+            sparse=True,
+            theta=theta,
+            grad_bias=p,
+            alpha=alpha,
+            beta=beta,
+            alpha_decay_schedule=alpha_d,
+            beta_growth_schedule=beta_g,
+        )
 
+        input_spike = np.array([[1], [2]])
+        in_spike_process = InSpikeSetProcess(
+            in_shape=input_spike.shape, spike_in=input_spike
+        )
+        out_spike_process = OutProbeProcess(out_shape=process.a_out.shape)
+        in_spike_process.a_out.connect(process.s_in)
+        process.a_out.connect(out_spike_process.s_in)
 
+        # testing for two timesteps because of design of
+        # solution neurons for recurrent connectivity. Nth
+        # state available only at N+1th timestep
+
+        in_spike_process.run(
+            condition=RunSteps(num_steps=2),
+            run_cfg=Loihi1SimCfg(select_sub_proc_model=True),
+        )
+        val = out_spike_process.vars.spike_out.get()
+        in_spike_process.stop()
+        prev_val = init_sol
+        curr_val = init_sol - alpha * (Q @ init_sol + p) - beta * A_T @ input_spike
+        self.assertEqual(
+            np.all(
+                val
+                == ((curr_val - prev_val) * (np.abs(curr_val - prev_val) > theta))
+            ),
+            True,
+        )
 if __name__ == "__main__":
     unittest.main()

@@ -347,7 +347,6 @@ class ConstraintCheck(AbstractProcess):
         self.x_internal = Var(
             shape=(shape[1], 1), init=kwargs.pop("x_int_init", 0)
         )
-        self.sparse = Var(shape=(1, 1), init=kwargs.pop("sparse", False))
         self.a_out = OutPort(shape=(shape[0], 1))
 
         # Profiling
@@ -382,6 +381,10 @@ class GradientDynamics(AbstractProcess):
             definition.
         qp_neurons_init : 1-D np.array, optional
             Initial value of qp solution neurons
+        sparse: bool, optional
+            Sparse is true when using sparsifying neuron-model eg. sigma-delta
+        theta : 1-D np.array, optional
+            Defines the threshold for sigma-delta spiking. Defaults to 0. 
         alpha : 1-D np.array, optional
             Define the learning rate for gradient descent. Defaults to 1.
         beta : 1-D np.array, optional
@@ -415,6 +418,10 @@ class GradientDynamics(AbstractProcess):
         self.qp_neuron_state = Var(
             shape=(shape_hess[0], 1),
             init=kwargs.pop("qp_neurons_init", np.zeros((shape_hess[0], 1))),
+        )
+        self.theta = Var(
+            shape=(shape_hess[0], 1),
+            init=kwargs.pop("theta", np.zeros((shape_hess[0], 1))),
         )
         self.alpha = Var(
             shape=(shape_hess[0], 1),

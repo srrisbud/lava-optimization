@@ -182,7 +182,7 @@ class PySDSNModel(PyLoihiProcessModel):
     def run_spk(self):
         # Delta Operation
         delta_state = self.qp_neuron_state - self.prev_qp_neuron_state
-        a_out = delta_state * ((delta_state) > self.theta)
+        a_out = delta_state * (np.abs(delta_state) > self.theta)
         self.spikeops += np.count_nonzero(a_out)
         self.a_out_cc.send(a_out)
         self.a_out_qc.send(a_out)
@@ -240,7 +240,6 @@ class SubCCModel(AbstractSubProcessModel):
     constraint_matrix: np.ndarray = LavaPyType(np.ndarray, np.float64)
     constraint_bias: np.ndarray = LavaPyType(np.ndarray, np.float64)
     x_internal: np.ndarray = LavaPyType(np.ndarray, np.float64)
-    sparse: bool = LavaPyType(bool, bool)
     a_out: PyOutPort = LavaPyType(PyOutPort.VEC_DENSE, np.float64)
 
     # profiling
@@ -346,6 +345,8 @@ class SubGDModel(AbstractSubProcessModel):
         qp_neuron_i = proc.init_args.get(
             "qp_neurons_init", np.zeros(shape_sol)
         )
+        sparse = proc.init_args.get("sparse", False)
+        theta = proc.init_args.get("theta", np.zeros(shape_sol))
         alpha = proc.init_args.get("alpha", np.ones(shape_sol))
         beta = proc.init_args.get("beta", np.ones(shape_sol))
         a_d = proc.init_args.get("alpha_decay_schedule", 10000)
@@ -353,15 +354,28 @@ class SubGDModel(AbstractSubProcessModel):
 
         # Initialize subprocesses
         self.qC = QuadraticConnectivity(shape=shape_hess, hessian=hessian)
-        self.sN = SolutionNeurons(
-            shape=shape_sol,
-            qp_neurons_init=qp_neuron_i,
-            grad_bias=grad_bias,
-            alpha=alpha,
-            beta=beta,
-            alpha_decay_schedule=a_d,
-            beta_growth_schedule=b_g,
-        )
+        if sparse == True:
+            self.sN = SigmaDeltaSolutionNeurons(
+                shape=shape_sol,
+                qp_neurons_init=qp_neuron_i,
+                grad_bias=grad_bias,
+                theta = theta,
+                alpha=alpha,
+                beta=beta,
+                alpha_decay_schedule=a_d,
+                beta_growth_schedule=b_g,
+            )
+            proc.vars.theta.alias(self.sN.vars.theta)
+        else:
+            self.sN = SolutionNeurons(
+                shape=shape_sol,
+                qp_neurons_init=qp_neuron_i,
+                grad_bias=grad_bias,
+                alpha=alpha,
+                beta=beta,
+                alpha_decay_schedule=a_d,
+                beta_growth_schedule=b_g,
+            )
         self.cN = ConstraintNormals(
             shape=shape_constraint_matrix_T,
             constraint_normals=constraint_matrix_T,
