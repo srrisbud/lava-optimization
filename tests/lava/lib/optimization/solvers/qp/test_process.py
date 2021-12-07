@@ -249,7 +249,7 @@ class TestProcessesFloatingPoint(unittest.TestCase):
         self.assertEqual(np.all(process.s_in.shape == (A_T.shape[1], 1)), True)
         self.assertEqual(np.all(process.a_out.shape == (P.shape[0], 1)), True)
 
-        ## test sparse gradient dynamics 
+        # test sparse gradient dynamics
         theta = 0.2
         process = GradientDynamics(
             hessian=P,

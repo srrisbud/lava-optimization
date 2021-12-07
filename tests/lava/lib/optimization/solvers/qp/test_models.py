@@ -234,7 +234,7 @@ class TestModelsFloatingPoint(unittest.TestCase):
         """
         init_sol = np.array([[2, 4, 6, 4, 1]]).T
         p = np.array([[4, 3, 2, 1, 1]]).T
-        theta, alpha, beta, alpha_d, beta_g = 5, 3, 2, 100, 100
+        theta, alpha, beta, alpha_d, beta_g = 10, 3, 2, 100, 100
         process = SigmaDeltaSolutionNeurons(
             shape=init_sol.shape,
             qp_neurons_init=init_sol,
@@ -282,7 +282,10 @@ class TestModelsFloatingPoint(unittest.TestCase):
         self.assertEqual(
             np.all(
                 val
-                == ((curr_val - prev_val) * (np.abs(curr_val - prev_val) > theta))
+                == (
+                    (curr_val - prev_val)
+                    * (np.abs(curr_val - prev_val) > theta)
+                )
             ),
             True,
         )
@@ -457,8 +460,8 @@ class TestModelsFloatingPoint(unittest.TestCase):
             True,
         )
         in_spike_process.stop()
-        
-        ## test sparse gradient dynamics 
+
+        # test sparse gradient dynamics
         theta = 0.2
         process = GradientDynamics(
             hessian=Q,
@@ -492,13 +495,20 @@ class TestModelsFloatingPoint(unittest.TestCase):
         val = out_spike_process.vars.spike_out.get()
         in_spike_process.stop()
         prev_val = init_sol
-        curr_val = init_sol - alpha * (Q @ init_sol + p) - beta * A_T @ input_spike
+        curr_val = (
+            init_sol - alpha * (Q @ init_sol + p) - beta * A_T @ input_spike
+        )
         self.assertEqual(
             np.all(
                 val
-                == ((curr_val - prev_val) * (np.abs(curr_val - prev_val) > theta))
+                == (
+                    (curr_val - prev_val)
+                    * (np.abs(curr_val - prev_val) > theta)
+                )
             ),
             True,
         )
+
+
 if __name__ == "__main__":
     unittest.main()

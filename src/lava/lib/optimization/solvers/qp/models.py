@@ -203,11 +203,10 @@ class PySDSNModel(PyLoihiProcessModel):
             self.growth_counter = 0
 
         # process behavior: gradient update
-        self.prev_qp_neuron_state = self.qp_neuron_state
+        self.prev_qp_neuron_state = self.qp_neuron_state.copy()
         state_update = (
             -self.alpha * (s_in_qc + self.grad_bias) - self.beta * s_in_cn
         )
-
         self.qp_neuron_state += state_update
         self.neurops += np.count_nonzero(state_update)
 
@@ -267,7 +266,7 @@ class SubCCModel(AbstractSubProcessModel):
             shape=constraint_bias.shape, thresholds=constraint_bias
         )
 
-        if sparse == True:
+        if sparse:
             self.sigmaNeurons = SigmaNeurons(
                 shape=(constraint_matrix.shape[1], 1), x_int_init=x_int_init
             )
@@ -354,12 +353,12 @@ class SubGDModel(AbstractSubProcessModel):
 
         # Initialize subprocesses
         self.qC = QuadraticConnectivity(shape=shape_hess, hessian=hessian)
-        if sparse == True:
+        if sparse:
             self.sN = SigmaDeltaSolutionNeurons(
                 shape=shape_sol,
                 qp_neurons_init=qp_neuron_i,
                 grad_bias=grad_bias,
-                theta = theta,
+                theta=theta,
                 alpha=alpha,
                 beta=beta,
                 alpha_decay_schedule=a_d,

@@ -253,7 +253,7 @@ class SigmaDeltaSolutionNeurons(AbstractProcess):
             shape=shape, init=kwargs.pop("grad_bias", np.zeros(shape))
         )
         self.theta = Var(
-            shape=shape, init=kwargs.pop("theta", np.ones((shape[0], 0)))
+            shape=shape, init=kwargs.pop("theta", np.zeros((shape[0], 1)))
         )
         self.alpha = Var(
             shape=shape, init=kwargs.pop("alpha", np.ones((shape[0], 1)))
@@ -384,7 +384,7 @@ class GradientDynamics(AbstractProcess):
         sparse: bool, optional
             Sparse is true when using sparsifying neuron-model eg. sigma-delta
         theta : 1-D np.array, optional
-            Defines the threshold for sigma-delta spiking. Defaults to 0. 
+            Defines the threshold for sigma-delta spiking. Defaults to 0.
         alpha : 1-D np.array, optional
             Define the learning rate for gradient descent. Defaults to 1.
         beta : 1-D np.array, optional
