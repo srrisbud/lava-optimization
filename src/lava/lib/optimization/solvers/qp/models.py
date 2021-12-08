@@ -149,7 +149,6 @@ class PySNModel(PyLoihiProcessModel):
             self.growth_counter = 0
 
         # process behavior: gradient update
-        print("Normal QC: {}".format(s_in_qc[0:5]))
         curr_state = (
             -self.alpha * (s_in_qc + self.grad_bias) - self.beta * s_in_cn
         )
@@ -170,8 +169,10 @@ class PySDSNModel(PyLoihiProcessModel):
     theta: np.ndarray = LavaPyType(np.ndarray, np.float64)
     alpha: np.ndarray = LavaPyType(np.ndarray, np.float64)
     beta: np.ndarray = LavaPyType(np.ndarray, np.float64)
+    theta_decay_schedule: int = LavaPyType(int, np.int32)
     alpha_decay_schedule: int = LavaPyType(int, np.int32)
     beta_growth_schedule: int = LavaPyType(int, np.int32)
+    decay_counter_theta: int = LavaPyType(int, np.int32)
     decay_counter: int = LavaPyType(int, np.int32)
     growth_counter: int = LavaPyType(int, np.int32)
 
@@ -191,6 +192,12 @@ class PySDSNModel(PyLoihiProcessModel):
 
         s_in_qc = self.s_in_qc.recv()
         s_in_cn = self.s_in_cn.recv()
+
+        self.decay_counter_theta += 1
+        if self.decay_counter_theta == self.theta_decay_schedule:
+            # TODO: guard against shift overflows in fixed-point
+            self.theta /= 2  # equivalent to right shift operation
+            self.decay_counter_theta = 0
 
         self.decay_counter += 1
         if self.decay_counter == self.alpha_decay_schedule:
@@ -353,6 +360,7 @@ class SubGDModel(AbstractSubProcessModel):
         theta = proc.init_args.get("theta", np.zeros(shape_sol))
         alpha = proc.init_args.get("alpha", np.ones(shape_sol))
         beta = proc.init_args.get("beta", np.ones(shape_sol))
+        t_d = proc.init_args.get("theta_decay_schedule", 10000)
         a_d = proc.init_args.get("alpha_decay_schedule", 10000)
         b_g = proc.init_args.get("beta_decay_schedule", 10000)
 
@@ -368,10 +376,15 @@ class SubGDModel(AbstractSubProcessModel):
                 theta=theta,
                 alpha=alpha,
                 beta=beta,
+                theta_decay_schedule=t_d,
                 alpha_decay_schedule=a_d,
                 beta_growth_schedule=b_g,
             )
             proc.vars.theta.alias(self.sN.vars.theta)
+            proc.vars.theta_decay_schedule.alias(
+                self.sN.vars.theta_decay_schedule
+            )
+
         else:
             self.sN = SolutionNeurons(
                 shape=shape_sol,

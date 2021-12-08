@@ -110,7 +110,7 @@ class TestProcessesFloatingPoint(unittest.TestCase):
     def test_process_sigma_delta_solution_neurons(self):
         init_sol = np.array([[2, 4, 6, 4, 1]]).T
         p = np.array([[4, 3, 2, 1, 1]]).T
-        theta, alpha, beta, alpha_d, beta_g = 0.1, 3, 2, 100, 100
+        theta, alpha, beta, theta_d, alpha_d, beta_g = 0.1, 3, 2, 10, 100, 100
         process = SigmaDeltaSolutionNeurons(
             shape=init_sol.shape,
             qp_neurons_init=init_sol,
@@ -118,6 +118,7 @@ class TestProcessesFloatingPoint(unittest.TestCase):
             theta=theta,
             alpha=alpha,
             beta=beta,
+            theta_decay_schedule=theta_d,
             alpha_decay_schedule=alpha_d,
             beta_growth_schedule=beta_g,
         )
@@ -136,11 +137,15 @@ class TestProcessesFloatingPoint(unittest.TestCase):
         self.assertEqual(np.all(process.vars.alpha.get() == alpha), True)
         self.assertEqual(np.all(process.vars.beta.get() == beta), True)
         self.assertEqual(
+            process.vars.theta_decay_schedule.get() == theta_d, True
+        )
+        self.assertEqual(
             process.vars.alpha_decay_schedule.get() == alpha_d, True
         )
         self.assertEqual(
             process.vars.beta_growth_schedule.get() == beta_g, True
         )
+        self.assertEqual(process.vars.decay_counter_theta.get() == 0, True)
         self.assertEqual(process.vars.decay_counter.get() == 0, True)
         self.assertEqual(process.vars.growth_counter.get() == 0, True)
         self.assertEqual(
@@ -250,7 +255,7 @@ class TestProcessesFloatingPoint(unittest.TestCase):
         self.assertEqual(np.all(process.a_out.shape == (P.shape[0], 1)), True)
 
         # test sparse gradient dynamics
-        theta = 0.2
+        theta, theta_d = 0.2, 10
         process = GradientDynamics(
             hessian=P,
             constraint_matrix_T=A_T,
@@ -260,6 +265,7 @@ class TestProcessesFloatingPoint(unittest.TestCase):
             grad_bias=p,
             alpha=alpha,
             beta=beta,
+            theta_decay_schedule=theta_d,
             alpha_decay_schedule=alpha_d,
             beta_growth_schedule=beta_g,
         )
@@ -274,6 +280,9 @@ class TestProcessesFloatingPoint(unittest.TestCase):
         self.assertEqual(np.all(process.vars.theta.get() == theta), True)
         self.assertEqual(np.all(process.vars.alpha.get() == alpha), True)
         self.assertEqual(np.all(process.vars.beta.get() == beta), True)
+        self.assertEqual(
+            process.vars.theta_decay_schedule.get() == theta_d, True
+        )
         self.assertEqual(
             process.vars.alpha_decay_schedule.get() == alpha_d, True
         )

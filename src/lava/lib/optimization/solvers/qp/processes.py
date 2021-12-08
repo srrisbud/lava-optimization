@@ -225,6 +225,10 @@ class SigmaDeltaSolutionNeurons(AbstractProcess):
             Defines the learning rate for gradient descent. Defaults to 1.
         beta : 1-D np.array, optional
             Defines the learning rate for constraint-checking. Defaults to 1.
+        theta_decay_schedule : int, optional
+            The number of iterations after which one right shift operation
+            takes place for theta. Default intialization to a very high value
+            of 10000.
         alpha_decay_schedule : int, optional
             The number of iterations after which one right shift operation
             takes place for alpha. Default intialization to a very high value
@@ -261,12 +265,16 @@ class SigmaDeltaSolutionNeurons(AbstractProcess):
         self.beta = Var(
             shape=shape, init=kwargs.pop("beta", np.ones((shape[0], 1)))
         )
+        self.theta_decay_schedule = Var(
+            shape=(1, 1), init=kwargs.pop("theta_decay_schedule", 10000)
+        )
         self.alpha_decay_schedule = Var(
             shape=(1, 1), init=kwargs.pop("alpha_decay_schedule", 10000)
         )
         self.beta_growth_schedule = Var(
             shape=(1, 1), init=kwargs.pop("beta_growth_schedule", 10000)
         )
+        self.decay_counter_theta = Var(shape=(1, 1), init=0)
         self.decay_counter = Var(shape=(1, 1), init=0)
         self.growth_counter = Var(shape=(1, 1), init=0)
 
@@ -389,6 +397,10 @@ class GradientDynamics(AbstractProcess):
             Define the learning rate for gradient descent. Defaults to 1.
         beta : 1-D np.array, optional
             Define the learning rate for constraint-checking. Defaults to 1.
+        theta_decay_schedule : int, optional
+            The number of iterations after which one right shift operation
+            takes place for theta. Default intialization to a very high value
+            of 10000.
         alpha_decay_schedule : int, optional
             The number of iterations after which one right shift operation
             takes place for alpha. Default intialization to a very high value
@@ -430,6 +442,9 @@ class GradientDynamics(AbstractProcess):
         self.beta = Var(
             shape=(shape_hess[0], 1),
             init=kwargs.pop("beta", np.ones((shape_hess[0], 1))),
+        )
+        self.theta_decay_schedule = Var(
+            shape=(1, 1), init=kwargs.pop("theta_decay_schedule", 10000)
         )
         self.alpha_decay_schedule = Var(
             shape=(1, 1), init=kwargs.pop("alpha_decay_schedule", 10000)
