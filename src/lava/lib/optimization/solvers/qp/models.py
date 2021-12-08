@@ -149,6 +149,7 @@ class PySNModel(PyLoihiProcessModel):
             self.growth_counter = 0
 
         # process behavior: gradient update
+        print("Normal QC: {}".format(s_in_qc[0:5]))
         curr_state = (
             -self.alpha * (s_in_qc + self.grad_bias) - self.beta * s_in_cn
         )
@@ -182,10 +183,11 @@ class PySDSNModel(PyLoihiProcessModel):
     def run_spk(self):
         # Delta Operation
         delta_state = self.qp_neuron_state - self.prev_qp_neuron_state
-        a_out = delta_state * (np.abs(delta_state) > self.theta)
-        self.spikeops += np.count_nonzero(a_out)
-        self.a_out_cc.send(a_out)
-        self.a_out_qc.send(a_out)
+        a_out_cc = delta_state * (np.abs(delta_state) >= self.theta)
+        a_out_qc = self.qp_neuron_state * (np.abs(delta_state) >= self.theta)
+        self.spikeops += np.count_nonzero(a_out_cc)
+        self.a_out_cc.send(a_out_cc)
+        self.a_out_qc.send(a_out_qc)
 
         s_in_qc = self.s_in_qc.recv()
         s_in_cn = self.s_in_cn.recv()
@@ -207,7 +209,9 @@ class PySDSNModel(PyLoihiProcessModel):
         state_update = (
             -self.alpha * (s_in_qc + self.grad_bias) - self.beta * s_in_cn
         )
-        self.qp_neuron_state += state_update
+        self.qp_neuron_state += state_update * (
+            np.abs(state_update) >= self.theta
+        )
         self.neurops += np.count_nonzero(state_update)
 
 
@@ -267,6 +271,7 @@ class SubCCModel(AbstractSubProcessModel):
         )
 
         if sparse:
+            print("[INFO]: Using additional Sigma layer")
             self.sigmaNeurons = SigmaNeurons(
                 shape=(constraint_matrix.shape[1], 1), x_int_init=x_int_init
             )
@@ -353,7 +358,9 @@ class SubGDModel(AbstractSubProcessModel):
 
         # Initialize subprocesses
         self.qC = QuadraticConnectivity(shape=shape_hess, hessian=hessian)
+
         if sparse:
+            print("[INFO]: Using Sigma Delta Solution Neurons")
             self.sN = SigmaDeltaSolutionNeurons(
                 shape=shape_sol,
                 qp_neurons_init=qp_neuron_i,
