@@ -14,6 +14,8 @@ from lava.lib.optimization.solvers.qp.processes import (
     ConstraintDirections,
     QuadraticConnectivity,
     GradientDynamics,
+    SigmaDeltaSolutionNeurons,
+    SigmaNeurons,
 )
 
 
@@ -39,6 +41,18 @@ class TestProcessesFloatingPoint(unittest.TestCase):
         )
         self.assertEqual(
             np.all(process.a_out.shape == (weights.shape[0], 1)), True
+        )
+
+    def test_process_sigma_neurons(self):
+        process = SigmaNeurons()
+        self.assertEqual(process.vars.x_internal.get() == 0, True)
+        inp_bias = np.array([[2, 4, 6]]).T
+        process = SigmaNeurons(shape=inp_bias.shape, x_int_init=inp_bias)
+        self.assertEqual(
+            np.all(process.vars.x_internal.get() == inp_bias), True
+        )
+        self.assertEqual(
+            np.all(process.s_in.shape == (inp_bias.shape[0], 1)), True
         )
 
     def test_process_constraint_neurons(self):
@@ -78,6 +92,60 @@ class TestProcessesFloatingPoint(unittest.TestCase):
         self.assertEqual(
             process.vars.beta_growth_schedule.get() == beta_g, True
         )
+        self.assertEqual(process.vars.decay_counter.get() == 0, True)
+        self.assertEqual(process.vars.growth_counter.get() == 0, True)
+        self.assertEqual(
+            np.all(process.s_in_qc.shape == (p.shape[0], 1)), True
+        )
+        self.assertEqual(
+            np.all(process.s_in_cn.shape == (p.shape[0], 1)), True
+        )
+        self.assertEqual(
+            np.all(process.a_out_qc.shape == (p.shape[0], 1)), True
+        )
+        self.assertEqual(
+            np.all(process.a_out_cc.shape == (p.shape[0], 1)), True
+        )
+
+    def test_process_sigma_delta_solution_neurons(self):
+        init_sol = np.array([[2, 4, 6, 4, 1]]).T
+        p = np.array([[4, 3, 2, 1, 1]]).T
+        theta, alpha, beta, theta_d, alpha_d, beta_g = 0.1, 3, 2, 10, 100, 100
+        process = SigmaDeltaSolutionNeurons(
+            shape=init_sol.shape,
+            qp_neurons_init=init_sol,
+            grad_bias=p,
+            theta=theta,
+            alpha=alpha,
+            beta=beta,
+            theta_decay_schedule=theta_d,
+            alpha_decay_schedule=alpha_d,
+            beta_growth_schedule=beta_g,
+        )
+        self.assertEqual(
+            np.all(process.vars.qp_neuron_state.get() == init_sol), True
+        )
+        self.assertEqual(
+            np.all(
+                process.vars.prev_qp_neuron_state.get()
+                == np.zeros(init_sol.shape)
+            ),
+            True,
+        )
+        self.assertEqual(np.all(process.vars.grad_bias.get() == p), True)
+        self.assertEqual(np.all(process.vars.theta.get() == theta), True)
+        self.assertEqual(np.all(process.vars.alpha.get() == alpha), True)
+        self.assertEqual(np.all(process.vars.beta.get() == beta), True)
+        self.assertEqual(
+            process.vars.theta_decay_schedule.get() == theta_d, True
+        )
+        self.assertEqual(
+            process.vars.alpha_decay_schedule.get() == alpha_d, True
+        )
+        self.assertEqual(
+            process.vars.beta_growth_schedule.get() == beta_g, True
+        )
+        self.assertEqual(process.vars.decay_counter_theta.get() == 0, True)
         self.assertEqual(process.vars.decay_counter.get() == 0, True)
         self.assertEqual(process.vars.growth_counter.get() == 0, True)
         self.assertEqual(
@@ -133,6 +201,22 @@ class TestProcessesFloatingPoint(unittest.TestCase):
         self.assertEqual(np.all(process.s_in.shape == (A.shape[1], 1)), True)
         self.assertEqual(np.all(process.a_out.shape == (A.shape[0], 1)), True)
 
+        # testing sparse input constraint check
+        x_init = np.array([[0.2, 0.4, 0.2]]).T
+        process = ConstraintCheck(
+            constraint_matrix=A,
+            constraint_bias=b,
+            sparse=True,
+            x_int_init=x_init,
+        )
+        self.assertEqual(
+            np.all(process.vars.constraint_matrix.get() == A), True
+        )
+        self.assertEqual(np.all(process.vars.constraint_bias.get() == b), True)
+        self.assertEqual(np.all(process.vars.x_internal.get() == x_init), True)
+        self.assertEqual(np.all(process.s_in.shape == (A.shape[1], 1)), True)
+        self.assertEqual(np.all(process.a_out.shape == (A.shape[0], 1)), True)
+
     def test_process_gradient_dynamics(self):
         P = np.array([[2, 43, 2], [43, 3, 4], [2, 4, 1]])
 
@@ -161,6 +245,44 @@ class TestProcessesFloatingPoint(unittest.TestCase):
         self.assertEqual(np.all(process.vars.grad_bias.get() == p), True)
         self.assertEqual(np.all(process.vars.alpha.get() == alpha), True)
         self.assertEqual(np.all(process.vars.beta.get() == beta), True)
+        self.assertEqual(
+            process.vars.alpha_decay_schedule.get() == alpha_d, True
+        )
+        self.assertEqual(
+            process.vars.beta_growth_schedule.get() == beta_g, True
+        )
+        self.assertEqual(np.all(process.s_in.shape == (A_T.shape[1], 1)), True)
+        self.assertEqual(np.all(process.a_out.shape == (P.shape[0], 1)), True)
+
+        # test sparse gradient dynamics
+        theta, theta_d = 0.2, 10
+        process = GradientDynamics(
+            hessian=P,
+            constraint_matrix_T=A_T,
+            qp_neurons_init=init_sol,
+            sparse=True,
+            theta=theta,
+            grad_bias=p,
+            alpha=alpha,
+            beta=beta,
+            theta_decay_schedule=theta_d,
+            alpha_decay_schedule=alpha_d,
+            beta_growth_schedule=beta_g,
+        )
+        self.assertEqual(
+            np.all(process.vars.constraint_matrix_T.get() == A_T), True
+        )
+        self.assertEqual(np.all(process.vars.hessian.get() == P), True)
+        self.assertEqual(
+            np.all(process.vars.qp_neuron_state.get() == init_sol), True
+        )
+        self.assertEqual(np.all(process.vars.grad_bias.get() == p), True)
+        self.assertEqual(np.all(process.vars.theta.get() == theta), True)
+        self.assertEqual(np.all(process.vars.alpha.get() == alpha), True)
+        self.assertEqual(np.all(process.vars.beta.get() == beta), True)
+        self.assertEqual(
+            process.vars.theta_decay_schedule.get() == theta_d, True
+        )
         self.assertEqual(
             process.vars.alpha_decay_schedule.get() == alpha_d, True
         )

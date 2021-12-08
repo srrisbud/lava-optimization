@@ -25,6 +25,8 @@ from lava.lib.optimization.solvers.qp.models import (
     ConstraintDirections,
     QuadraticConnectivity,
     GradientDynamics,
+    SigmaDeltaSolutionNeurons,
+    SigmaNeurons,
 )
 
 
@@ -120,6 +122,30 @@ class TestModelsFloatingPoint(unittest.TestCase):
         )
         in_spike_process.stop()
 
+    def test_model_sigma_neurons(self):
+        """test behavior of sigma (accumulator) neuron process
+        (vector-vector addition)
+        """
+        inp_bias = np.array([[2, 4, 6]]).T
+        process = SigmaNeurons(shape=inp_bias.shape, x_int_init=inp_bias)
+        input_spike = np.array([[1], [5], [2]])
+        in_spike_process = InSpikeSetProcess(
+            in_shape=input_spike.shape, spike_in=input_spike
+        )
+        out_spike_process = OutProbeProcess(out_shape=process.a_out.shape)
+
+        in_spike_process.a_out.connect(process.s_in)
+        process.a_out.connect(out_spike_process.s_in)
+
+        in_spike_process.run(
+            condition=RunSteps(num_steps=2), run_cfg=Loihi1SimCfg()
+        )
+        val = out_spike_process.vars.spike_out.get()
+        in_spike_process.stop()
+
+        # testing accumulation operation
+        self.assertEqual(np.all(val == (2 * input_spike + inp_bias)), True)
+
     def test_model_constraint_neurons(self):
         """test behavior of constraint directions process
         (vector-vector addition)
@@ -201,6 +227,68 @@ class TestModelsFloatingPoint(unittest.TestCase):
             True,
         )
         in_spike_cn_process.stop()
+
+    def test_model_sigma_delta_solution_neurons(self):
+        """test behavior of SigmaDeltaSolutionNeurons process
+        -alpha*(input_spike_1 + p)- beta*input_spike_2
+        """
+        init_sol = np.array([[2, 4, 6, 4, 1]]).T
+        p = np.array([[4, 3, 2, 1, 1]]).T
+        theta, alpha, beta, alpha_d, beta_g = 10, 3, 2, 100, 100
+        process = SigmaDeltaSolutionNeurons(
+            shape=init_sol.shape,
+            qp_neurons_init=init_sol,
+            grad_bias=p,
+            theta=theta,
+            alpha=alpha,
+            beta=beta,
+            alpha_decay_schedule=alpha_d,
+            beta_growth_schedule=beta_g,
+        )
+        input_spike_cn = np.array([[1], [5], [2], [2], [0]])
+        input_spike_qc = np.array([[8], [2], [22], [21], [1]])
+        in_spike_cn_process = InSpikeSetProcess(
+            in_shape=input_spike_cn.shape, spike_in=input_spike_cn
+        )
+        in_spike_qc_process = InSpikeSetProcess(
+            in_shape=input_spike_qc.shape, spike_in=input_spike_qc
+        )
+        out_spike_cc_process = OutProbeProcess(
+            out_shape=process.a_out_cc.shape
+        )
+        out_spike_qc_process = OutProbeProcess(
+            out_shape=process.a_out_qc.shape
+        )
+
+        in_spike_cn_process.a_out.connect(process.s_in_cn)
+        in_spike_qc_process.a_out.connect(process.s_in_qc)
+        process.a_out_cc.connect(out_spike_cc_process.s_in)
+        process.a_out_qc.connect(out_spike_qc_process.s_in)
+
+        # testing for two timesteps because of design of
+        # solution neurons for recurrent connectivity. Nth
+        # state available only at N+1th timestep
+        in_spike_cn_process.run(
+            condition=RunSteps(num_steps=2), run_cfg=Loihi1SimCfg()
+        )
+        val = out_spike_cc_process.vars.spike_out.get()
+        in_spike_cn_process.stop()
+        # prev val changes from zero to init value during the first step as per
+        # process model design
+        prev_val = init_sol
+        curr_val = (
+            init_sol - alpha * (input_spike_qc + p) - beta * input_spike_cn
+        )
+        self.assertEqual(
+            np.all(
+                val
+                == (
+                    (curr_val - prev_val)
+                    * (np.abs(curr_val - prev_val) > theta)
+                )
+            ),
+            True,
+        )
 
     def test_model_constraint_normals(self):
         """test behavior of ConstraintNormals process
@@ -288,6 +376,40 @@ class TestModelsFloatingPoint(unittest.TestCase):
         )
         in_spike_process.stop()
 
+        # test constraint check in sparse mode
+        x_init = np.array([[0.2, 0.4, 0.2]]).T
+        process = ConstraintCheck(
+            constraint_matrix=A,
+            constraint_bias=k,
+            sparse=True,
+            x_int_init=x_init,
+        )
+        input_spike = np.array([[1], [2], [1]])
+        in_spike_process = InSpikeSetProcess(
+            in_shape=input_spike.shape, spike_in=input_spike
+        )
+        out_spike_process = OutProbeProcess(out_shape=process.a_out.shape)
+
+        in_spike_process.a_out.connect(process.s_in)
+        process.a_out.connect(out_spike_process.s_in)
+
+        in_spike_process.run(
+            condition=RunSteps(num_steps=1),
+            run_cfg=Loihi1SimCfg(select_sub_proc_model=True),
+        )
+        val = out_spike_process.vars.spike_out.get()
+        in_spike_process.stop()
+        self.assertEqual(
+            np.all(
+                val
+                == (
+                    (A @ (input_spike + x_init) - k)
+                    * (A @ (input_spike + x_init) > k)
+                )
+            ),
+            True,
+        )
+
     def test_model_gradient_dynamics(self):
         """test behavior of GradientDynamics process
         -alpha*(Q@x_init + p)- beta*A_T@graded_constraint_spike
@@ -338,6 +460,54 @@ class TestModelsFloatingPoint(unittest.TestCase):
             True,
         )
         in_spike_process.stop()
+
+        # test sparse gradient dynamics
+        theta = 0.2
+        process = GradientDynamics(
+            hessian=Q,
+            constraint_matrix_T=A_T,
+            qp_neurons_init=init_sol,
+            sparse=True,
+            theta=theta,
+            grad_bias=p,
+            alpha=alpha,
+            beta=beta,
+            alpha_decay_schedule=alpha_d,
+            beta_growth_schedule=beta_g,
+        )
+
+        input_spike = np.array([[1], [2]])
+        in_spike_process = InSpikeSetProcess(
+            in_shape=input_spike.shape, spike_in=input_spike
+        )
+        out_spike_process = OutProbeProcess(out_shape=process.a_out.shape)
+        in_spike_process.a_out.connect(process.s_in)
+        process.a_out.connect(out_spike_process.s_in)
+
+        # testing for two timesteps because of design of
+        # solution neurons for recurrent connectivity. Nth
+        # state available only at N+1th timestep
+
+        in_spike_process.run(
+            condition=RunSteps(num_steps=2),
+            run_cfg=Loihi1SimCfg(select_sub_proc_model=True),
+        )
+        val = out_spike_process.vars.spike_out.get()
+        in_spike_process.stop()
+        prev_val = init_sol
+        curr_val = (
+            init_sol - alpha * (Q @ init_sol + p) - beta * A_T @ input_spike
+        )
+        self.assertEqual(
+            np.all(
+                val
+                == (
+                    (curr_val - prev_val)
+                    * (np.abs(curr_val - prev_val) > theta)
+                )
+            ),
+            True,
+        )
 
 
 if __name__ == "__main__":

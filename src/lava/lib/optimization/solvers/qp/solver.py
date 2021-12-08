@@ -10,9 +10,11 @@ from lava.lib.optimization.solvers.qp.models import (
     ConstraintCheck,
     GradientDynamics,
 )
-
+import time
 
 # Future: inheritance from OptimizationSolver class
+
+
 class QPSolver:
     """Solve Full QP by connecting two Lava processes, GradDynamics and
     ConstraintCheck
@@ -94,11 +96,13 @@ class QPSolver:
         # core solver
         GradDyn.a_out.connect(ConsCheck.s_in)
         ConsCheck.a_out.connect(GradDyn.s_in)
-
+        tic = time.time()
         GradDyn.run(
             condition=RunSteps(num_steps=i_max),
             run_cfg=Loihi1SimCfg(select_sub_proc_model=True),
         )
+        toc = time.time()
         sol = GradDyn.vars.qp_neuron_state.get()
         GradDyn.stop()
+        print(tic - toc)
         return sol
