@@ -62,7 +62,7 @@ class PySigNeurModel(PyLoihiProcessModel):
         # process behavior: constraint violation check
         self.x_internal += s_in
         a_out = self.x_internal
-        self.neurops += np.count_nonzero(a_out)
+        self.neurops += np.count_nonzero(s_in)
         self.spikeops += np.count_nonzero(a_out)
         self.a_out.send(a_out)
 
@@ -219,7 +219,8 @@ class PySDSNModel(PyLoihiProcessModel):
         self.qp_neuron_state += state_update * (
             np.abs(state_update) >= self.theta
         )
-        self.neurops += np.count_nonzero(state_update)
+        self.neurops += np.count_nonzero( state_update * (
+            np.abs(state_update) >= self.theta))
 
 
 @implements(proc=ConstraintNormals, protocol=LoihiProtocol)
@@ -429,3 +430,4 @@ class SubGDModel(AbstractSubProcessModel):
         proc.vars.sN_synops.alias(self.sN.vars.synops)
         proc.vars.sN_neurops.alias(self.sN.vars.neurops)
         proc.vars.sN_spikeops.alias(self.sN.vars.spikeops)
+
