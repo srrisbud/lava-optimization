@@ -24,6 +24,7 @@ from lava.lib.optimization.solvers.qp.processes import (
     GradientDynamics,
     SigmaDeltaSolutionNeurons,
     SigmaNeurons,
+    QPTerLIFSolutionNeurons,
 )
 
 
@@ -219,8 +220,77 @@ class PySDSNModel(PyLoihiProcessModel):
         self.qp_neuron_state += state_update * (
             np.abs(state_update) >= self.theta
         )
-        self.neurops += np.count_nonzero( state_update * (
-            np.abs(state_update) >= self.theta))
+        self.neurops += np.count_nonzero(
+            state_update * (np.abs(state_update) >= self.theta)
+        )
+
+
+@implements(proc=QPTerLIFSolutionNeurons, protocol=LoihiProtocol)
+@requires(CPU)
+class PyQPTerLIFModel(PyLoihiProcessModel):
+    # Inputs
+    s_in_qc: PyInPort = LavaPyType(PyInPort.VEC_DENSE, np.float64)
+    a_out_qc: PyOutPort = LavaPyType(PyOutPort.VEC_DENSE, np.float64)
+    s_in_cn: PyInPort = LavaPyType(PyInPort.VEC_DENSE, np.float64)
+    a_out_cc: PyOutPort = LavaPyType(PyOutPort.VEC_DENSE, np.float64)
+    # v
+    qp_neuron_state: np.ndarray = LavaPyType(np.ndarray, np.float64)
+    # u
+    inp: np.ndarray = LavaPyType(np.ndarray, np.float64)
+    # bias
+    grad_bias: np.ndarray = LavaPyType(np.ndarray, np.float64)
+    # thresholds
+    vth_lo: np.ndarray = LavaPyType(np.ndarray, np.float64)
+    vth_hi: np.ndarray = LavaPyType(np.ndarray, np.float64)
+    # du
+    alpha: np.ndarray = LavaPyType(np.ndarray, np.float64)
+    # dv
+    beta: np.ndarray = LavaPyType(np.ndarray, np.float64)
+    alpha_decay_schedule: int = LavaPyType(int, np.int32)
+    beta_growth_schedule: int = LavaPyType(int, np.int32)
+    decay_counter: int = LavaPyType(int, np.int32)
+    growth_counter: int = LavaPyType(int, np.int32)
+
+    # Profiling
+    synops: int = LavaPyType(int, np.int32)
+    neurops: int = LavaPyType(int, np.int32)
+    spikeops: int = LavaPyType(int, np.int32)
+
+    def run_spk(self):
+        # Ternary Spiking
+        a_out_cc = (-1) * (self.qp_neuron_state <= self.vth_lo) + (
+            self.qp_neuron_state >= self.vth_hi
+        )
+        self.spikeops += np.count_nonzero(a_out_cc)
+
+        # Reset
+        self.qp_neuron_state[a_out_cc != 0] = 0
+        a_out_qc = self.qp_neuron_state
+        self.a_out_cc.send(a_out_cc)
+        self.a_out_qc.send(a_out_qc)
+
+        s_in_qc = self.s_in_qc.recv()
+        s_in_cn = self.s_in_cn.recv()
+
+        self.decay_counter += 1
+        if self.decay_counter == self.alpha_decay_schedule:
+            # TODO: guard against shift overflows in fixed-point
+            self.alpha /= 2  # equivalent to right shift operation
+            self.decay_counter = 0
+
+        self.growth_counter += 1
+        if self.growth_counter == self.beta_growth_schedule:
+            # TODO: guard against shift overflows in fixed-point
+            self.beta *= 2  # equivalent to left shift operation
+            self.growth_counter = 0
+
+        # Update equations
+        self.inp = self.inp * (1 - self.alpha)
+        self.inp += s_in_qc + s_in_cn
+        self.qp_neuron_state = (
+            self.qp_neuron_state * (1 - self.beta) + self.inp + self.grad_bias
+        )
+        self.neurops += len(self.qp_neuron_state)
 
 
 @implements(proc=ConstraintNormals, protocol=LoihiProtocol)
@@ -430,4 +500,3 @@ class SubGDModel(AbstractSubProcessModel):
         proc.vars.sN_synops.alias(self.sN.vars.synops)
         proc.vars.sN_neurops.alias(self.sN.vars.neurops)
         proc.vars.sN_spikeops.alias(self.sN.vars.spikeops)
-
