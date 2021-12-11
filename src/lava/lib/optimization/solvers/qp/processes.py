@@ -307,9 +307,9 @@ class QPTerLIFSolutionNeurons(AbstractProcess):
         u_init: 1-D np.array, optional
             initial value of input current, u. Defaults to 0.
         vth_lo : 1-D np.array, optional
-            Defines the lower threshold for spiking. Defaults to 0.
+            Defines the lower threshold for spiking. Defaults to 10.
         vth_hi : 1-D np.array, optional
-            Defines the upper threshold for spiking. Defaults to 0.
+            Defines the upper threshold for spiking. Defaults to -10.
         grad_bias : 1-D np.array, optional
             The bias of the gradient of the QP. This is the value 'p' in the
             QP definition. For the neuron model this is the bias
@@ -483,6 +483,13 @@ class GradientDynamics(AbstractProcess):
             Initial value of qp solution neurons
         sparse: bool, optional
             Sparse is true when using sparsifying neuron-model eg. sigma-delta
+        model: str, optional 
+            "SigDel" for sigma delta neurons and "TLIF" for Ternary LIF neurons.
+            Defines the type of neuron to be used for sparse activity.
+        vth_lo : 1-D np.array, optional
+            Defines the lower threshold for TLIF spiking. Defaults to 10.
+        vth_hi : 1-D np.array, optional
+            Defines the upper threshold for TLIF spiking. Defaults to -10.
         theta : 1-D np.array, optional
             Defines the threshold for sigma-delta spiking. Defaults to 0.
         alpha : 1-D np.array, optional
@@ -504,7 +511,6 @@ class GradientDynamics(AbstractProcess):
     """
 
     def __init__(self, **kwargs: ty.Any):
-        """ """
         super().__init__(**kwargs)
         hessian = kwargs.pop("hessian", 0)
         constraint_matrix_T = kwargs.pop("constraint_matrix_T", 0)
@@ -523,6 +529,19 @@ class GradientDynamics(AbstractProcess):
             shape=(shape_hess[0], 1),
             init=kwargs.pop("qp_neurons_init", np.zeros((shape_hess[0], 1))),
         )
+        
+        vth_hi = kwargs.pop("vth_hi", 10)
+        vth_lo = kwargs.pop("vth_lo", -10)
+
+        if vth_lo > vth_hi:
+            raise AssertionError(
+                f"Lower threshold {vth_lo} is larger than the "
+                f"upper threshold {vth_hi} for Ternary LIF "
+                f"neurons. Consider switching the values."
+            )
+        self.vth_lo = Var(shape=(shape_hess[0], 1), init=vth_lo)
+        self.vth_hi = Var(shape=(shape_hess[0], 1), init=vth_hi)
+
         self.theta = Var(
             shape=(shape_hess[0], 1),
             init=kwargs.pop("theta", np.zeros((shape_hess[0], 1))),

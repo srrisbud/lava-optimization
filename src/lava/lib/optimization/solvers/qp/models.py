@@ -230,9 +230,9 @@ class PySDSNModel(PyLoihiProcessModel):
 class PyQPTerLIFModel(PyLoihiProcessModel):
     # Inputs
     s_in_qc: PyInPort = LavaPyType(PyInPort.VEC_DENSE, np.float64)
-    a_out_qc: PyOutPort = LavaPyType(PyOutPort.VEC_DENSE, np.float64)
+    a_out_qc: PyOutPort = LavaPyType(PyOutPort.VEC_DENSE, np.float64, precision=2)
     s_in_cn: PyInPort = LavaPyType(PyInPort.VEC_DENSE, np.float64)
-    a_out_cc: PyOutPort = LavaPyType(PyOutPort.VEC_DENSE, np.float64)
+    a_out_cc: PyOutPort = LavaPyType(PyOutPort.VEC_DENSE, np.float64, precision=2)
     # v
     qp_neuron_state: np.ndarray = LavaPyType(np.ndarray, np.float64)
     # u
@@ -286,10 +286,12 @@ class PyQPTerLIFModel(PyLoihiProcessModel):
 
         # Update equations
         self.inp = self.inp * (1 - self.alpha)
-        self.inp += s_in_qc + s_in_cn
+        
+        self.inp = self.inp+s_in_qc + s_in_cn
         self.qp_neuron_state = (
             self.qp_neuron_state * (1 - self.beta) + self.inp + self.grad_bias
         )
+        
         self.neurops += len(self.qp_neuron_state)
 
 
@@ -428,35 +430,57 @@ class SubGDModel(AbstractSubProcessModel):
             "qp_neurons_init", np.zeros(shape_sol)
         )
         sparse = proc.init_args.get("sparse", False)
+        model = proc.init_args.get("model", "SigDel")
         theta = proc.init_args.get("theta", np.zeros(shape_sol))
+
         alpha = proc.init_args.get("alpha", np.ones(shape_sol))
         beta = proc.init_args.get("beta", np.ones(shape_sol))
-        t_d = proc.init_args.get("theta_decay_schedule", 10000)
-        a_d = proc.init_args.get("alpha_decay_schedule", 10000)
-        b_g = proc.init_args.get("beta_decay_schedule", 10000)
+        t_d = proc.init_args.get("theta_decay_schedule", 100000)
+        a_d = proc.init_args.get("alpha_decay_schedule", 100000)
+        b_g = proc.init_args.get("beta_decay_schedule", 100000)
 
         # Initialize subprocesses
         self.qC = QuadraticConnectivity(shape=shape_hess, hessian=hessian)
 
         if sparse:
-            print("[INFO]: Using Sigma Delta Solution Neurons")
-            self.sN = SigmaDeltaSolutionNeurons(
-                shape=shape_sol,
-                qp_neurons_init=qp_neuron_i,
-                grad_bias=grad_bias,
-                theta=theta,
-                alpha=alpha,
-                beta=beta,
-                theta_decay_schedule=t_d,
-                alpha_decay_schedule=a_d,
-                beta_growth_schedule=b_g,
-            )
-            proc.vars.theta.alias(self.sN.vars.theta)
-            proc.vars.theta_decay_schedule.alias(
-                self.sN.vars.theta_decay_schedule
-            )
+            if model=="SigDel":
+                print("[INFO]: Using Sigma Delta Solution Neurons")
+                self.sN = SigmaDeltaSolutionNeurons(
+                    shape=shape_sol,
+                    qp_neurons_init=qp_neuron_i,
+                    grad_bias=grad_bias,
+                    theta=theta,
+                    alpha=alpha,
+                    beta=beta,
+                    theta_decay_schedule=t_d,
+                    alpha_decay_schedule=a_d,
+                    beta_growth_schedule=b_g,
+                )
+                proc.vars.theta.alias(self.sN.vars.theta)
+                proc.vars.theta_decay_schedule.alias(
+                    self.sN.vars.theta_decay_schedule
+                )
+            if model=="TLIF":
+                print("[INFO]: Using Ternary LIF Solution Neurons")
+                # thresholds
+                vth_lo: np.ndarray = LavaPyType(np.ndarray, np.float64)
+                vth_hi: np.ndarray = LavaPyType(np.ndarray, np.float64)
+                self.sN = QPTerLIFSolutionNeurons(
+                    shape=shape_sol,
+                    qp_neurons_init=qp_neuron_i,
+                    grad_bias=grad_bias,
+                    vth_lo=vth_lo,
+                    vth_hi=vth_hi,
+                    alpha=alpha,
+                    beta=beta,
+                    alpha_decay_schedule=a_d,
+                    beta_growth_schedule=b_g,
+                )
+                proc.vars.vth_hi.alias(self.sN.vars.vth_hi)
+                proc.vars.vth_lo.alias(self.sN.vars.vth_lo)
 
         else:
+            print("[INFO]: Using Dense Solution Neurons")
             self.sN = SolutionNeurons(
                 shape=shape_sol,
                 qp_neurons_init=qp_neuron_i,
@@ -466,6 +490,7 @@ class SubGDModel(AbstractSubProcessModel):
                 alpha_decay_schedule=a_d,
                 beta_growth_schedule=b_g,
             )
+        
         self.cN = ConstraintNormals(
             shape=shape_constraint_matrix_T,
             constraint_normals=constraint_matrix_T,

@@ -304,13 +304,14 @@ class TestProcessesFloatingPoint(unittest.TestCase):
         self.assertEqual(np.all(process.s_in.shape == (A_T.shape[1], 1)), True)
         self.assertEqual(np.all(process.a_out.shape == (P.shape[0], 1)), True)
 
-        # test sparse gradient dynamics
+        # test sparse gradient dynamics: SigDel
         theta, theta_d = 0.2, 10
         process = GradientDynamics(
             hessian=P,
             constraint_matrix_T=A_T,
             qp_neurons_init=init_sol,
             sparse=True,
+            model='SigDel',
             theta=theta,
             grad_bias=p,
             alpha=alpha,
@@ -341,6 +342,46 @@ class TestProcessesFloatingPoint(unittest.TestCase):
         )
         self.assertEqual(np.all(process.s_in.shape == (A_T.shape[1], 1)), True)
         self.assertEqual(np.all(process.a_out.shape == (P.shape[0], 1)), True)
+
+        # test sparse gradient dynamics: TLIF
+        theta, vth_lo, vth_hi = 0.2, -20, 20
+        process = GradientDynamics(
+            hessian=P,
+            constraint_matrix_T=A_T,
+            qp_neurons_init=init_sol,
+            sparse=True,
+            model='TLIF',
+            vth_lo=vth_lo,
+            vth_hi=vth_hi,
+            grad_bias=p,
+            alpha=alpha,
+            beta=beta,
+            alpha_decay_schedule=alpha_d,
+            beta_growth_schedule=beta_g,
+        )
+        self.assertEqual(
+            np.all(process.vars.constraint_matrix_T.get() == A_T), True
+        )
+        self.assertEqual(np.all(process.vars.hessian.get() == P), True)
+        self.assertEqual(
+            np.all(process.vars.qp_neuron_state.get() == init_sol), True
+        )
+        self.assertEqual(np.all(process.vars.grad_bias.get() == p), True)
+       
+        self.assertEqual(np.all(process.vars.vth_lo.get() == vth_lo), True)
+        self.assertEqual(np.all(process.vars.vth_hi.get() == vth_hi), True)
+
+        self.assertEqual(np.all(process.vars.alpha.get() == alpha), True)
+        self.assertEqual(np.all(process.vars.beta.get() == beta), True)
+        self.assertEqual(
+            process.vars.alpha_decay_schedule.get() == alpha_d, True
+        )
+        self.assertEqual(
+            process.vars.beta_growth_schedule.get() == beta_g, True
+        )
+        self.assertEqual(np.all(process.s_in.shape == (A_T.shape[1], 1)), True)
+        self.assertEqual(np.all(process.a_out.shape == (P.shape[0], 1)), True)
+
 
 
 if __name__ == "__main__":
