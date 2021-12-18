@@ -125,3 +125,40 @@ class QP:
     @property
     def num_variables(self) -> int:
         return len(self._linear_offset)
+
+
+class SparseCodingLASSO:
+    """An interface to set up a sparse coding problem using the LASSO
+    objective function, to be solved by locally competitive algorithm (LCA).
+
+    Parameters
+    ----------
+    dictionary : 2-D numpy.array
+        Dictionary of features, using which sparse code is generated
+    input : 1-D or 2-D numpy.array
+        Input, which is being approximated using a sparse code
+    sparsity_coeff : scalar
+        Lagrangian coefficient of the L-1 norm in LASSO objective function,
+        determining the sparsity of the resulting sparse code
+    """
+
+    def __init__(self, dictionary=None, input=None, sparsity_coeff=None):
+        if dictionary is None or input is None or sparsity_coeff is None:
+            raise ValueError("A dictionary, an input, and a sparsity "
+                             "coefficient all three are required to "
+                             "instantiate a SparseCodingLASSO problem")
+        self._dictionary = dictionary
+        self._input = input
+        self._lambda = sparsity_coeff
+
+    @property
+    def dictionary(self):
+        return self._dictionary
+
+    @property
+    def input(self):
+        return self._input
+
+    @property
+    def sparsity_coeff(self):
+        return self._lambda
