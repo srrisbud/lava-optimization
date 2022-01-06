@@ -195,6 +195,11 @@ class SolutionNeurons(AbstractProcess):
         self.decay_counter = Var(shape=(1, 1), init=0)
         self.growth_counter = Var(shape=(1, 1), init=0)
 
+        # Momentum
+        self.prev_qp_neuron_state =  Var(shape=shape, init=np.zeros(shape))
+        self.gamma_m = Var(shape=(1, 1), init= 1)
+        self.u_prev = Var(shape=(1, 1), init= 0)
+        
         # Profiling
         self.synops = Var(shape=(1, 1), init=0)
         self.neurops = Var(shape=(1, 1), init=0)
@@ -277,6 +282,10 @@ class SigmaDeltaSolutionNeurons(AbstractProcess):
         self.decay_counter_theta = Var(shape=(1, 1), init=0)
         self.decay_counter = Var(shape=(1, 1), init=0)
         self.growth_counter = Var(shape=(1, 1), init=0)
+
+        # Momentum
+        self.gamma_m = Var(shape=(1, 1), init= 1)
+        self.u_prev = Var(shape=(1, 1), init= 0)
 
         # Profiling
         self.synops = Var(shape=(1, 1), init=0)
@@ -530,17 +539,9 @@ class GradientDynamics(AbstractProcess):
             init=kwargs.pop("qp_neurons_init", np.zeros((shape_hess[0], 1))),
         )
         
-        vth_hi = kwargs.pop("vth_hi", 10)
-        vth_lo = kwargs.pop("vth_lo", -10)
 
-        if vth_lo > vth_hi:
-            raise AssertionError(
-                f"Lower threshold {vth_lo} is larger than the "
-                f"upper threshold {vth_hi} for Ternary LIF "
-                f"neurons. Consider switching the values."
-            )
-        self.vth_lo = Var(shape=(shape_hess[0], 1), init=vth_lo)
-        self.vth_hi = Var(shape=(shape_hess[0], 1), init=vth_hi)
+        self.vth_lo = Var(shape=(shape_hess[0], 1), init= kwargs.pop("vth_lo", -10))
+        self.vth_hi = Var(shape=(shape_hess[0], 1), init= kwargs.pop("vth_hi", 10))
 
         self.theta = Var(
             shape=(shape_hess[0], 1),
@@ -578,3 +579,19 @@ class GradientDynamics(AbstractProcess):
         self.sN_synops = Var(shape=(1, 1), init=0)
         self.sN_neurops = Var(shape=(1, 1), init=0)
         self.sN_spikeops = Var(shape=(1, 1), init=0)
+class OutProbeProcess(AbstractProcess):
+    def __init__(self, **kwargs):
+        """Use to set read output spike from a process
+
+        Kwargs:
+        ------
+            out_shape : int tuple, optional
+                Set OutShape to custom value
+        """
+        super().__init__(**kwargs)
+        shape = kwargs.pop("out_shape", (1, 1))
+        iterations = kwargs.pop("iterations", 1)
+        self.s_in = InPort(shape=shape)
+        var_shape = (iterations, shape[0])
+        self.sol_list = Var(shape=var_shape, init=np.zeros(var_shape))
+        self.it_counter = Var(shape=(1,1), init=0)

@@ -25,6 +25,7 @@ from lava.lib.optimization.solvers.qp.processes import (
     SigmaDeltaSolutionNeurons,
     SigmaNeurons,
     QPTerLIFSolutionNeurons,
+    OutProbeProcess,
 )
 
 
@@ -123,11 +124,15 @@ class PySNModel(PyLoihiProcessModel):
     decay_counter: int = LavaPyType(int, np.int32)
     growth_counter: int = LavaPyType(int, np.int32)
 
+    # momentum 
+    prev_qp_neuron_state: np.ndarray = LavaPyType(np.ndarray, np.float64)
+    gamma_m: np.ndarray = LavaPyType(float, np.float64)
+    u_prev: np.ndarray = LavaPyType(float, np.float64)
+
     # Profiling
     synops: int = LavaPyType(int, np.int32)
     neurops: int = LavaPyType(int, np.int32)
     spikeops: int = LavaPyType(int, np.int32)
-
     def run_spk(self):
         a_out = self.qp_neuron_state
         self.spikeops += np.count_nonzero(a_out)
@@ -150,11 +155,20 @@ class PySNModel(PyLoihiProcessModel):
             self.growth_counter = 0
 
         # process behavior: gradient update
+        self.prev_qp_neuron_state = self.qp_neuron_state.copy()
         curr_state = (
             -self.alpha * (s_in_qc + self.grad_bias) - self.beta * s_in_cn
         )
         self.qp_neuron_state += curr_state
-        self.neurops += np.count_nonzero(curr_state)
+        
+        # momentum update
+        self.qp_neuron_state = self.qp_neuron_state*(1-self.gamma_m) + self.gamma_m * self.prev_qp_neuron_state
+        u = (1+np.sqrt(1+4*pow(self.u_prev,2)))/2 
+        self.gamma_m = (1 - u)/(1+np.sqrt(1+4*pow(u,2)))/2
+        self.u_prev = u
+
+        print("State Sol: {}".format(self.qp_neuron_state[0:5]))
+        self.neurops += np.count_nonzero(curr_state) + np.count_nonzero(self.qp_neuron_state)
 
 
 @implements(proc=SigmaDeltaSolutionNeurons, protocol=LoihiProtocol)
@@ -176,6 +190,10 @@ class PySDSNModel(PyLoihiProcessModel):
     decay_counter_theta: int = LavaPyType(int, np.int32)
     decay_counter: int = LavaPyType(int, np.int32)
     growth_counter: int = LavaPyType(int, np.int32)
+
+    # momentum 
+    gamma_m: np.ndarray = LavaPyType(float, np.float64)
+    u_prev: np.ndarray = LavaPyType(float, np.float64)
 
     # Profiling
     synops: int = LavaPyType(int, np.int32)
@@ -220,9 +238,16 @@ class PySDSNModel(PyLoihiProcessModel):
         self.qp_neuron_state += state_update * (
             np.abs(state_update) >= self.theta
         )
+
+        # momentum update
+        self.qp_neuron_state = self.qp_neuron_state*(1-self.gamma_m) + self.gamma_m * self.prev_qp_neuron_state
+        u = (1+np.sqrt(1+4*pow(self.u_prev,2)))/2 
+        self.gamma_m = (1 - u)/(1+np.sqrt(1+4*pow(u,2)))/2
+        self.u_prev = u
+
         self.neurops += np.count_nonzero(
             state_update * (np.abs(state_update) >= self.theta)
-        )
+        ) + np.count_nonzero(self.qp_neuron_state)
 
 
 @implements(proc=QPTerLIFSolutionNeurons, protocol=LoihiProtocol)
@@ -261,11 +286,12 @@ class PyQPTerLIFModel(PyLoihiProcessModel):
         a_out_cc = (-1) * (self.qp_neuron_state <= self.vth_lo) + (
             self.qp_neuron_state >= self.vth_hi
         )
+        
         self.spikeops += np.count_nonzero(a_out_cc)
 
         # Reset
         self.qp_neuron_state[a_out_cc != 0] = 0
-        a_out_qc = self.qp_neuron_state
+        a_out_qc = a_out_cc 
         self.a_out_cc.send(a_out_cc)
         self.a_out_qc.send(a_out_qc)
 
@@ -287,11 +313,11 @@ class PyQPTerLIFModel(PyLoihiProcessModel):
         # Update equations
         self.inp = self.inp * (1 - self.alpha)
         
-        self.inp = self.inp+s_in_qc + s_in_cn
+        self.inp = self.inp - s_in_qc - s_in_cn
         self.qp_neuron_state = (
-            self.qp_neuron_state * (1 - self.beta) + self.inp + self.grad_bias
+            self.qp_neuron_state * (1 - self.beta) + self.inp - self.grad_bias
         )
-        
+        print("Ternary State: {}".format(self.qp_neuron_state[0:5]))
         self.neurops += len(self.qp_neuron_state)
 
 
@@ -432,7 +458,8 @@ class SubGDModel(AbstractSubProcessModel):
         sparse = proc.init_args.get("sparse", False)
         model = proc.init_args.get("model", "SigDel")
         theta = proc.init_args.get("theta", np.zeros(shape_sol))
-
+        vth_lo = proc.init_args.get("vth_lo", -10)
+        vth_hi = proc.init_args.get("vth_hi", 10)
         alpha = proc.init_args.get("alpha", np.ones(shape_sol))
         beta = proc.init_args.get("beta", np.ones(shape_sol))
         t_d = proc.init_args.get("theta_decay_schedule", 100000)
@@ -462,9 +489,6 @@ class SubGDModel(AbstractSubProcessModel):
                 )
             if model=="TLIF":
                 print("[INFO]: Using Ternary LIF Solution Neurons")
-                # thresholds
-                vth_lo: np.ndarray = LavaPyType(np.ndarray, np.float64)
-                vth_hi: np.ndarray = LavaPyType(np.ndarray, np.float64)
                 self.sN = QPTerLIFSolutionNeurons(
                     shape=shape_sol,
                     qp_neurons_init=qp_neuron_i,
@@ -525,3 +549,15 @@ class SubGDModel(AbstractSubProcessModel):
         proc.vars.sN_synops.alias(self.sN.vars.synops)
         proc.vars.sN_neurops.alias(self.sN.vars.neurops)
         proc.vars.sN_spikeops.alias(self.sN.vars.spikeops)
+
+@implements(proc=OutProbeProcess, protocol=LoihiProtocol)
+@requires(CPU)
+class PyProbeModel(PyLoihiProcessModel):
+    s_in: PyInPort = LavaPyType(PyInPort.VEC_DENSE, np.float64)
+    sol_list: np.ndarray = LavaPyType(np.ndarray, np.float64)
+    it_counter: int = LavaPyType(int, np.int32)
+
+    def run_spk(self):
+        s_in = self.s_in.recv()
+        self.sol_list[self.it_counter,:] = s_in.reshape((s_in.shape[0],)) 
+        self.it_counter+=1
