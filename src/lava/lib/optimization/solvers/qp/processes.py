@@ -195,6 +195,11 @@ class SolutionNeurons(AbstractProcess):
         self.decay_counter = Var(shape=(1, 1), init=0)
         self.growth_counter = Var(shape=(1, 1), init=0)
 
+        # Momentum
+        self.prev_qp_neuron_state =  Var(shape=shape, init=np.zeros(shape))
+        self.gamma_m = Var(shape=(1, 1), init= 1)
+        self.u_prev = Var(shape=(1, 1), init= 0)
+        
         # Profiling
         self.synops = Var(shape=(1, 1), init=0)
         self.neurops = Var(shape=(1, 1), init=0)
@@ -275,6 +280,102 @@ class SigmaDeltaSolutionNeurons(AbstractProcess):
             shape=(1, 1), init=kwargs.pop("beta_growth_schedule", 10000)
         )
         self.decay_counter_theta = Var(shape=(1, 1), init=0)
+        self.decay_counter = Var(shape=(1, 1), init=0)
+        self.growth_counter = Var(shape=(1, 1), init=0)
+
+        # Momentum
+        self.gamma_m = Var(shape=(1, 1), init= 1)
+        self.u_prev = Var(shape=(1, 1), init= 0)
+
+        # Profiling
+        self.synops = Var(shape=(1, 1), init=0)
+        self.neurops = Var(shape=(1, 1), init=0)
+        self.spikeops = Var(shape=(1, 1), init=0)
+
+
+class QPTerLIFSolutionNeurons(AbstractProcess):
+    """Implements Neurons that evolve using LIF dynamics but use ternary
+    spikes i.e +1, -1 or 0 (no spike).
+
+    Implements the abstract behaviour
+        u = u * (1 - du)
+        u += s_in_qc + s_in_cn
+        v = v * (1 - dv) + u + bias
+        s_out = (-1) * (v <= vth_lo) + (v >= vth_hi)
+        v[s_out != 0] = 0
+
+    Intialize the solutionNeurons process.
+
+        Kwargs:
+        -------
+        shape : int tuple, optional
+            A tuple defining the shape of the qp neurons. Defaults to (1,1).
+        qp_neurons_init : 1-D np.array, optional
+            initial value of qp solution neurons. This is the voltage v in the
+            LIF implementation
+        u_init: 1-D np.array, optional
+            initial value of input current, u. Defaults to 0.
+        vth_lo : 1-D np.array, optional
+            Defines the lower threshold for spiking. Defaults to 10.
+        vth_hi : 1-D np.array, optional
+            Defines the upper threshold for spiking. Defaults to -10.
+        grad_bias : 1-D np.array, optional
+            The bias of the gradient of the QP. This is the value 'p' in the
+            QP definition. For the neuron model this is the bias
+        alpha : 1-D np.array, optional
+            Defines the du parameter for current (inp). Default 0.
+        beta : 1-D np.array, optional
+            Defines the dv parameter for voltage (qp_neuron_state). Default 0.
+        alpha_decay_schedule : int, optional
+            The number of iterations after which one right shift operation
+            takes place for alpha. Default intialization to a very high value
+            of 100000. This option is not used for most cases
+        beta_growth_schedule : int, optional
+            The number of iterations after which one left shift operation takes
+            place for beta. Default intialization to a very high value of
+            100000. This option is not used for most cases
+    """
+
+    def __init__(self, **kwargs: ty.Any):
+        super().__init__(**kwargs)
+        shape = kwargs.get("shape", (1, 1))
+        # In/outPorts that come from/go to the quadratic connectivity process
+        self.s_in_qc = InPort(shape=(shape[0], 1))
+        self.a_out_qc = OutPort(shape=(shape[0], 1))
+        # In/outPorts that come from/go to the constraint normals process
+        self.s_in_cn = InPort(shape=(shape[0], 1))
+        # OutPort for constraint checking
+        self.a_out_cc = OutPort(shape=(shape[0], 1))
+        self.qp_neuron_state = Var(
+            shape=shape, init=kwargs.pop("qp_neurons_init", np.zeros(shape))
+        )
+        self.inp = Var(shape=shape, init=kwargs.pop("u_init", np.zeros(shape)))
+        vth_hi = kwargs.pop("vth_hi", 10)
+        vth_lo = kwargs.pop("vth_lo", -10)
+
+        if vth_lo > vth_hi:
+            raise AssertionError(
+                f"Lower threshold {vth_lo} is larger than the "
+                f"upper threshold {vth_hi} for Ternary LIF "
+                f"neurons. Consider switching the values."
+            )
+        self.vth_lo = Var(shape=shape, init=vth_lo)
+        self.vth_hi = Var(shape=shape, init=vth_hi)
+        self.grad_bias = Var(
+            shape=shape, init=kwargs.pop("grad_bias", np.zeros(shape))
+        )
+        self.alpha = Var(
+            shape=shape, init=kwargs.pop("alpha", np.zeros((shape[0], 1)))
+        )
+        self.beta = Var(
+            shape=shape, init=kwargs.pop("beta", np.zeros((shape[0], 1)))
+        )
+        self.alpha_decay_schedule = Var(
+            shape=(1, 1), init=kwargs.pop("alpha_decay_schedule", 100000)
+        )
+        self.beta_growth_schedule = Var(
+            shape=(1, 1), init=kwargs.pop("beta_growth_schedule", 100000)
+        )
         self.decay_counter = Var(shape=(1, 1), init=0)
         self.growth_counter = Var(shape=(1, 1), init=0)
 
@@ -391,6 +492,13 @@ class GradientDynamics(AbstractProcess):
             Initial value of qp solution neurons
         sparse: bool, optional
             Sparse is true when using sparsifying neuron-model eg. sigma-delta
+        model: str, optional 
+            "SigDel" for sigma delta neurons and "TLIF" for Ternary LIF neurons.
+            Defines the type of neuron to be used for sparse activity.
+        vth_lo : 1-D np.array, optional
+            Defines the lower threshold for TLIF spiking. Defaults to 10.
+        vth_hi : 1-D np.array, optional
+            Defines the upper threshold for TLIF spiking. Defaults to -10.
         theta : 1-D np.array, optional
             Defines the threshold for sigma-delta spiking. Defaults to 0.
         alpha : 1-D np.array, optional
@@ -412,7 +520,6 @@ class GradientDynamics(AbstractProcess):
     """
 
     def __init__(self, **kwargs: ty.Any):
-        """ """
         super().__init__(**kwargs)
         hessian = kwargs.pop("hessian", 0)
         constraint_matrix_T = kwargs.pop("constraint_matrix_T", 0)
@@ -431,6 +538,11 @@ class GradientDynamics(AbstractProcess):
             shape=(shape_hess[0], 1),
             init=kwargs.pop("qp_neurons_init", np.zeros((shape_hess[0], 1))),
         )
+        
+
+        self.vth_lo = Var(shape=(shape_hess[0], 1), init= kwargs.pop("vth_lo", -10))
+        self.vth_hi = Var(shape=(shape_hess[0], 1), init= kwargs.pop("vth_hi", 10))
+
         self.theta = Var(
             shape=(shape_hess[0], 1),
             init=kwargs.pop("theta", np.zeros((shape_hess[0], 1))),
@@ -467,3 +579,19 @@ class GradientDynamics(AbstractProcess):
         self.sN_synops = Var(shape=(1, 1), init=0)
         self.sN_neurops = Var(shape=(1, 1), init=0)
         self.sN_spikeops = Var(shape=(1, 1), init=0)
+class OutProbeProcess(AbstractProcess):
+    def __init__(self, **kwargs):
+        """Use to set read output spike from a process
+
+        Kwargs:
+        ------
+            out_shape : int tuple, optional
+                Set OutShape to custom value
+        """
+        super().__init__(**kwargs)
+        shape = kwargs.pop("out_shape", (1, 1))
+        iterations = kwargs.pop("iterations", 1)
+        self.s_in = InPort(shape=shape)
+        var_shape = (iterations, shape[0])
+        self.sol_list = Var(shape=var_shape, init=np.zeros(var_shape))
+        self.it_counter = Var(shape=(1,1), init=0)

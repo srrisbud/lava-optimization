@@ -5,6 +5,7 @@
 # Behavioral tests for all the models in QP
 import unittest
 import numpy as np
+from lava.lib.optimization.solvers.qp.processes import QPTerLIFSolutionNeurons
 from lava.magma.core.process.process import AbstractProcess
 from lava.magma.core.process.variable import Var
 from lava.magma.core.process.ports.ports import InPort, OutPort
@@ -230,7 +231,8 @@ class TestModelsFloatingPoint(unittest.TestCase):
 
     def test_model_sigma_delta_solution_neurons(self):
         """test behavior of SigmaDeltaSolutionNeurons process
-        -alpha*(input_spike_1 + p)- beta*input_spike_2
+        -alpha*(input_spike_1 + p)- beta*input_spike_2 
+        spike based on delta difference later
         """
         init_sol = np.array([[2, 4, 6, 4, 1]]).T
         p = np.array([[4, 3, 2, 1, 1]]).T
@@ -289,6 +291,75 @@ class TestModelsFloatingPoint(unittest.TestCase):
             ),
             True,
         )
+
+    def test_model_qpterlif_solution_neurons(self):
+        """test behavior of Ternary LIF solution neurons for QP 
+            u = u * (1 - du)
+            u += s_in_qc + s_in_cn
+            v = v * (1 - dv) + u + bias
+            s_out = (-1) * (v <= vth_lo) + (v >= vth_hi)
+            v[s_out != 0] = 0
+        """
+        init_sol = np.array([[2, 4, 6, 4, 1]]).T
+        inp = np.zeros(init_sol.shape)
+        p = np.array([[4, 3, 2, 1, 1]]).T
+        alpha, beta, alpha_d, beta_g = 3, 2, 100, 100
+        vth_hi, vth_lo = 3, 1
+        process = QPTerLIFSolutionNeurons(
+            shape=init_sol.shape,
+            qp_neurons_init=init_sol,
+            grad_bias=p,
+            vth_lo=vth_lo,
+            vth_hi=vth_hi,
+            alpha=alpha,
+            beta=beta,
+            alpha_decay_schedule=alpha_d,
+            beta_growth_schedule=beta_g,
+        )
+
+        input_spike_cn = np.array([[1], [5], [2], [2], [0]])
+        input_spike_qc = np.array([[8], [2], [22], [21], [1]])
+        in_spike_cn_process = InSpikeSetProcess(
+            in_shape=input_spike_cn.shape, spike_in=input_spike_cn
+        )
+        in_spike_qc_process = InSpikeSetProcess(
+            in_shape=input_spike_qc.shape, spike_in=input_spike_qc
+        )
+        out_spike_cc_process = OutProbeProcess(
+            out_shape=process.a_out_cc.shape
+        )
+        out_spike_qc_process = OutProbeProcess(
+            out_shape=process.a_out_qc.shape
+        )
+
+        in_spike_cn_process.a_out.connect(process.s_in_cn)
+        in_spike_qc_process.a_out.connect(process.s_in_qc)
+        process.a_out_cc.connect(out_spike_cc_process.s_in)
+        process.a_out_qc.connect(out_spike_qc_process.s_in)
+
+        # testing for two timesteps because of design of
+        # solution neurons for recurrent connectivity. Nth
+        # state available only at N+1th timestep
+        in_spike_cn_process.run(
+            condition=RunSteps(num_steps=2), run_cfg=Loihi1SimCfg()
+        )
+        var1 = out_spike_cc_process.vars.spike_out.get()
+        var2 = out_spike_qc_process.vars.spike_out.get()
+
+        in_spike_cn_process.stop()
+        
+        inp  = inp * (1-alpha)
+         
+        init_sol[(-1* (init_sol<= vth_lo) + (init_sol>= vth_hi))!=0]=0
+        inp = inp + input_spike_cn + input_spike_qc
+        neuron_state = init_sol*(1-beta) + inp + p
+        out1= -1* (neuron_state<= vth_lo) + (neuron_state>= vth_hi)
+        neuron_state[out1!=0] = 0
+        out2 = neuron_state
+
+        self.assertEqual(np.all(var1== out1), True,)
+        self.assertEqual(np.all(var2== out2), True,)
+
 
     def test_model_constraint_normals(self):
         """test behavior of ConstraintNormals process
@@ -461,13 +532,14 @@ class TestModelsFloatingPoint(unittest.TestCase):
         )
         in_spike_process.stop()
 
-        # test sparse gradient dynamics
+        # test sparse gradient dynamics: SigDel
         theta = 0.2
         process = GradientDynamics(
             hessian=Q,
             constraint_matrix_T=A_T,
             qp_neurons_init=init_sol,
             sparse=True,
+            model='SigDel',
             theta=theta,
             grad_bias=p,
             alpha=alpha,
@@ -508,6 +580,9 @@ class TestModelsFloatingPoint(unittest.TestCase):
             ),
             True,
         )
+
+        # test sparse gradient dynamics: TLIF
+       
 
 
 if __name__ == "__main__":
