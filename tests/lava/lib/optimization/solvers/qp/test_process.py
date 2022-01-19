@@ -311,7 +311,7 @@ class TestProcessesFloatingPoint(unittest.TestCase):
             constraint_matrix_T=A_T,
             qp_neurons_init=init_sol,
             sparse=True,
-            model='SigDel',
+            model="SigDel",
             theta=theta,
             grad_bias=p,
             alpha=alpha,
@@ -350,7 +350,7 @@ class TestProcessesFloatingPoint(unittest.TestCase):
             constraint_matrix_T=A_T,
             qp_neurons_init=init_sol,
             sparse=True,
-            model='TLIF',
+            model="TLIF",
             vth_lo=vth_lo,
             vth_hi=vth_hi,
             grad_bias=p,
@@ -367,7 +367,7 @@ class TestProcessesFloatingPoint(unittest.TestCase):
             np.all(process.vars.qp_neuron_state.get() == init_sol), True
         )
         self.assertEqual(np.all(process.vars.grad_bias.get() == p), True)
-       
+
         self.assertEqual(np.all(process.vars.vth_lo.get() == vth_lo), True)
         self.assertEqual(np.all(process.vars.vth_hi.get() == vth_hi), True)
 
@@ -381,7 +381,6 @@ class TestProcessesFloatingPoint(unittest.TestCase):
         )
         self.assertEqual(np.all(process.s_in.shape == (A_T.shape[1], 1)), True)
         self.assertEqual(np.all(process.a_out.shape == (P.shape[0], 1)), True)
-
 
 
 if __name__ == "__main__":

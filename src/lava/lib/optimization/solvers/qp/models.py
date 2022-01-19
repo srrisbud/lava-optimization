@@ -6,6 +6,7 @@
 Implement behaviors (models) of the processes defined in processes.py
 For further documentation please refer to processes.py
 """
+from calendar import c
 import numpy as np
 from lava.magma.core.sync.protocols.loihi_protocol import LoihiProtocol
 from lava.magma.core.model.py.ports import PyInPort, PyOutPort
@@ -39,11 +40,16 @@ class PyCDModel(PyLoihiProcessModel):
     synops: int = LavaPyType(int, np.int32)
     neurops: int = LavaPyType(int, np.int32)
     spikeops: int = LavaPyType(int, np.int32)
+    col_sum: np.ndarray = LavaPyType(np.ndarray, np.int32)
 
     def run_spk(self):
         s_in = self.s_in.recv()
         # process behavior: matrix multiplication
-        self.synops += np.count_nonzero(self.weights[:, s_in.nonzero()])
+        # self.synops += np.count_nonzero(self.weights[:, s_in.nonzero()])
+        self.synops += np.sum(self.col_sum[s_in.nonzero()[0]])
+        # print(s_in.nonzero())
+        # self.synops += sum(self.col_sum)
+        # print(self.col_sum)
         a_out = self.weights @ s_in
         self.a_out.send(a_out)
 
@@ -64,8 +70,8 @@ class PySigNeurModel(PyLoihiProcessModel):
         # process behavior: constraint violation check
         self.x_internal += s_in
         a_out = self.x_internal
-        self.neurops += np.count_nonzero(s_in)
-        self.spikeops += np.count_nonzero(a_out)
+        # self.neurops += np.count_nonzero(s_in)
+        # self.spikeops += np.count_nonzero(a_out)
         self.a_out.send(a_out)
 
 
@@ -84,8 +90,8 @@ class PyCNeuModel(PyLoihiProcessModel):
         s_in = self.s_in.recv()
         # process behavior: constraint violation check
         a_out = (s_in - self.thresholds) * (s_in > self.thresholds)
-        self.neurops += np.count_nonzero(a_out)
-        self.spikeops += np.count_nonzero(a_out)
+        # self.neurops += np.count_nonzero(a_out)
+        # self.spikeops += np.count_nonzero(a_out)
         self.a_out.send(a_out)
 
 
@@ -95,6 +101,7 @@ class PyQCModel(PyLoihiProcessModel):
     s_in: PyInPort = LavaPyType(PyInPort.VEC_DENSE, np.float64)
     a_out: PyOutPort = LavaPyType(PyOutPort.VEC_DENSE, np.float64)
     weights: np.ndarray = LavaPyType(np.ndarray, np.float64)
+
     # Profiling
     synops: int = LavaPyType(int, np.int32)
     neurops: int = LavaPyType(int, np.int32)
@@ -103,7 +110,7 @@ class PyQCModel(PyLoihiProcessModel):
     def run_spk(self):
         s_in = self.s_in.recv()
         # process behavior: matrix multiplication
-        self.synops += np.count_nonzero(self.weights[:, s_in.nonzero()])
+        # self.synops +=  np.sum(self.col_sum[s_in.nonzero()])
         a_out = self.weights @ s_in
         self.a_out.send(a_out)
 
@@ -136,7 +143,7 @@ class PySNModel(PyLoihiProcessModel):
 
     def run_spk(self):
         a_out = self.qp_neuron_state
-        self.spikeops += np.count_nonzero(a_out)
+        # self.spikeops += np.count_nonzero(a_out)
         self.a_out_cc.send(a_out)
         self.a_out_qc.send(a_out)
 
@@ -168,13 +175,14 @@ class PySNModel(PyLoihiProcessModel):
             + self.gamma_m * self.prev_qp_neuron_state
         )
         u = (1 + np.sqrt(1 + 4 * pow(self.u_prev, 2))) / 2
-        self.gamma_m = (1 - u) / (1 + np.sqrt(1 + 4 * pow(u, 2))) / 2
+        u_next = (1 + np.sqrt(1 + 4 * pow(u, 2))) / 2
+        self.gamma_m = (1 - u) / u_next
         self.u_prev = u
 
-        print("State Sol: {}".format(self.qp_neuron_state[0:5]))
-        self.neurops += np.count_nonzero(curr_state) + np.count_nonzero(
-            self.qp_neuron_state
-        )
+        # print("Momentum gamma: {}, u:{}\n ".format(self.gamma_m, self.u_prev))
+        print("Iteration {} compeleted \n".format(self.growth_counter))
+        # self.neurops += np.count_nonzero(curr_state)
+        # + np.count_nonzero(self.qp_neuron_state)
 
 
 @implements(proc=SigmaDeltaSolutionNeurons, protocol=LoihiProtocol)
@@ -211,7 +219,7 @@ class PySDSNModel(PyLoihiProcessModel):
         delta_state = self.qp_neuron_state - self.prev_qp_neuron_state
         a_out_cc = delta_state * (np.abs(delta_state) >= self.theta)
         a_out_qc = self.qp_neuron_state * (np.abs(delta_state) >= self.theta)
-        self.spikeops += np.count_nonzero(a_out_cc)
+        # self.spikeops += np.count_nonzero(a_out_cc)
         self.a_out_cc.send(a_out_cc)
         self.a_out_qc.send(a_out_qc)
 
@@ -245,18 +253,20 @@ class PySDSNModel(PyLoihiProcessModel):
             np.abs(state_update) >= self.theta
         )
 
-        # momentum update
+        # # momentum update
         self.qp_neuron_state = (
             self.qp_neuron_state * (1 - self.gamma_m)
             + self.gamma_m * self.prev_qp_neuron_state
         )
         u = (1 + np.sqrt(1 + 4 * pow(self.u_prev, 2))) / 2
-        self.gamma_m = (1 - u) / (1 + np.sqrt(1 + 4 * pow(u, 2))) / 2
+        u_next = (1 + np.sqrt(1 + 4 * pow(u, 2))) / 2
+        self.gamma_m = (1 - u) / u_next
         self.u_prev = u
 
-        self.neurops += np.count_nonzero(
-            state_update * (np.abs(state_update) >= self.theta)
-        ) + np.count_nonzero(self.qp_neuron_state)
+        # self.neurops += np.count_nonzero(
+        #     state_update * (np.abs(state_update) >= self.theta)
+        # )
+        # + np.count_nonzero(self.qp_neuron_state)
 
 
 @implements(proc=QPTerLIFSolutionNeurons, protocol=LoihiProtocol)
@@ -349,7 +359,7 @@ class PyCNorModel(PyLoihiProcessModel):
     def run_spk(self):
         s_in = self.s_in.recv()
         # process behavior: matrix multiplication
-        self.synops += np.count_nonzero(self.weights[:, s_in.nonzero()])
+        # self.synops += np.count_nonzero(self.weights[:, s_in.nonzero()])
         a_out = self.weights @ s_in
         self.a_out.send(a_out)
 

@@ -31,14 +31,16 @@ class ConstraintDirections(AbstractProcess):
         shape = kwargs.get("shape", (1, 1))
         self.s_in = InPort(shape=(shape[1], 1))
         self.a_out = OutPort(shape=(shape[0], 1))
-        self.weights = Var(
-            shape=shape, init=kwargs.pop("constraint_directions", 0)
-        )
+        weights = kwargs.pop("constraint_directions", 0)
+        self.weights = Var(shape=shape, init=weights)
 
         # Profiling
         self.synops = Var(shape=(1, 1), init=0)
         self.neurops = Var(shape=(1, 1), init=0)
         self.spikeops = Var(shape=(1, 1), init=0)
+        col_sum_init = np.count_nonzero(weights, axis=0)
+        self.col_sum = Var(shape=col_sum_init.shape, init=col_sum_init)
+        # self.col_sum = col_sum_init
 
 
 class SigmaNeurons(AbstractProcess):
