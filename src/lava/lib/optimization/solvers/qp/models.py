@@ -45,11 +45,7 @@ class PyCDModel(PyLoihiProcessModel):
     def run_spk(self):
         s_in = self.s_in.recv()
         # process behavior: matrix multiplication
-        # self.synops += np.count_nonzero(self.weights[:, s_in.nonzero()])
         self.synops += np.sum(self.col_sum[s_in.nonzero()[0]])
-        # print(s_in.nonzero())
-        # self.synops += sum(self.col_sum)
-        # print(self.col_sum)
         a_out = self.weights @ s_in
         self.a_out.send(a_out)
 
@@ -64,7 +60,7 @@ class PySigNeurModel(PyLoihiProcessModel):
     synops: int = LavaPyType(int, np.int32)
     neurops: int = LavaPyType(int, np.int32)
     spikeops: int = LavaPyType(int, np.int32)
-
+    
     def run_spk(self):
         s_in = self.s_in.recv()
         # process behavior: constraint violation check
@@ -106,11 +102,12 @@ class PyQCModel(PyLoihiProcessModel):
     synops: int = LavaPyType(int, np.int32)
     neurops: int = LavaPyType(int, np.int32)
     spikeops: int = LavaPyType(int, np.int32)
+    col_sum: np.ndarray = LavaPyType(np.ndarray, np.int32)
 
     def run_spk(self):
         s_in = self.s_in.recv()
         # process behavior: matrix multiplication
-        # self.synops +=  np.sum(self.col_sum[s_in.nonzero()])
+        self.synops += np.sum(self.col_sum[s_in.nonzero()[0]])
         a_out = self.weights @ s_in
         self.a_out.send(a_out)
 
@@ -355,11 +352,12 @@ class PyCNorModel(PyLoihiProcessModel):
     synops: int = LavaPyType(int, np.int32)
     neurops: int = LavaPyType(int, np.int32)
     spikeops: int = LavaPyType(int, np.int32)
+    col_sum: np.ndarray = LavaPyType(np.ndarray, np.int32)
 
     def run_spk(self):
         s_in = self.s_in.recv()
         # process behavior: matrix multiplication
-        # self.synops += np.count_nonzero(self.weights[:, s_in.nonzero()])
+        self.synops += np.sum(self.col_sum[s_in.nonzero()[0]])
         a_out = self.weights @ s_in
         self.a_out.send(a_out)
 
