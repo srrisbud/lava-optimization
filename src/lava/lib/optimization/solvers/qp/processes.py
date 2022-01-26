@@ -31,14 +31,16 @@ class ConstraintDirections(AbstractProcess):
         shape = kwargs.get("shape", (1, 1))
         self.s_in = InPort(shape=(shape[1], 1))
         self.a_out = OutPort(shape=(shape[0], 1))
-        self.weights = Var(
-            shape=shape, init=kwargs.pop("constraint_directions", 0)
-        )
+        weights = kwargs.pop("constraint_directions", 0)
+        self.weights = Var(shape=shape, init=weights)
 
         # Profiling
         self.synops = Var(shape=(1, 1), init=0)
         self.neurops = Var(shape=(1, 1), init=0)
         self.spikeops = Var(shape=(1, 1), init=0)
+        col_sum_init = np.count_nonzero(weights, axis=0)
+        self.col_sum = Var(shape=col_sum_init.shape, init=col_sum_init)
+        # self.col_sum = col_sum_init
 
 
 class SigmaNeurons(AbstractProcess):
@@ -125,12 +127,15 @@ class QuadraticConnectivity(AbstractProcess):
         shape = kwargs.get("shape", (1, 1))
         self.s_in = InPort(shape=(shape[1], 1))
         self.a_out = OutPort(shape=(shape[0], 1))
-        self.weights = Var(shape=shape, init=kwargs.pop("hessian", 0))
+        weights = kwargs.pop("hessian", 0)
+        self.weights = Var(shape=shape, init=weights)
 
         # Profiling
         self.synops = Var(shape=(1, 1), init=0)
         self.neurops = Var(shape=(1, 1), init=0)
         self.spikeops = Var(shape=(1, 1), init=0)
+        col_sum_init = np.count_nonzero(weights, axis=0)
+        self.col_sum = Var(shape=col_sum_init.shape, init=col_sum_init)
 
 
 class SolutionNeurons(AbstractProcess):
@@ -196,10 +201,10 @@ class SolutionNeurons(AbstractProcess):
         self.growth_counter = Var(shape=(1, 1), init=0)
 
         # Momentum
-        self.prev_qp_neuron_state =  Var(shape=shape, init=np.zeros(shape))
-        self.gamma_m = Var(shape=(1, 1), init= 1)
-        self.u_prev = Var(shape=(1, 1), init= 0)
-        
+        self.prev_qp_neuron_state = Var(shape=shape, init=np.zeros(shape))
+        self.gamma_m = Var(shape=(1, 1), init=1)
+        self.u_prev = Var(shape=(1, 1), init=0)
+
         # Profiling
         self.synops = Var(shape=(1, 1), init=0)
         self.neurops = Var(shape=(1, 1), init=0)
@@ -284,8 +289,8 @@ class SigmaDeltaSolutionNeurons(AbstractProcess):
         self.growth_counter = Var(shape=(1, 1), init=0)
 
         # Momentum
-        self.gamma_m = Var(shape=(1, 1), init= 1)
-        self.u_prev = Var(shape=(1, 1), init= 0)
+        self.gamma_m = Var(shape=(1, 1), init=1)
+        self.u_prev = Var(shape=(1, 1), init=0)
 
         # Profiling
         self.synops = Var(shape=(1, 1), init=0)
@@ -409,14 +414,15 @@ class ConstraintNormals(AbstractProcess):
         shape = kwargs.get("shape", (1, 1))
         self.s_in = InPort(shape=(shape[1], 1))
         self.a_out = OutPort(shape=(shape[0], 1))
-        self.weights = Var(
-            shape=shape, init=kwargs.pop("constraint_normals", 0)
-        )
+        weights = kwargs.pop("constraint_normals", 0)
+        self.weights = Var(shape=shape, init=weights)
 
         # Profiling
         self.synops = Var(shape=(1, 1), init=0)
         self.neurops = Var(shape=(1, 1), init=0)
         self.spikeops = Var(shape=(1, 1), init=0)
+        col_sum_init = np.count_nonzero(weights, axis=0)
+        self.col_sum = Var(shape=col_sum_init.shape, init=col_sum_init)
 
 
 class ConstraintCheck(AbstractProcess):
@@ -492,7 +498,7 @@ class GradientDynamics(AbstractProcess):
             Initial value of qp solution neurons
         sparse: bool, optional
             Sparse is true when using sparsifying neuron-model eg. sigma-delta
-        model: str, optional 
+        model: str, optional
             "SigDel" for sigma delta neurons and "TLIF" for Ternary LIF neurons.
             Defines the type of neuron to be used for sparse activity.
         vth_lo : 1-D np.array, optional
@@ -538,10 +544,13 @@ class GradientDynamics(AbstractProcess):
             shape=(shape_hess[0], 1),
             init=kwargs.pop("qp_neurons_init", np.zeros((shape_hess[0], 1))),
         )
-        
 
-        self.vth_lo = Var(shape=(shape_hess[0], 1), init= kwargs.pop("vth_lo", -10))
-        self.vth_hi = Var(shape=(shape_hess[0], 1), init= kwargs.pop("vth_hi", 10))
+        self.vth_lo = Var(
+            shape=(shape_hess[0], 1), init=kwargs.pop("vth_lo", -10)
+        )
+        self.vth_hi = Var(
+            shape=(shape_hess[0], 1), init=kwargs.pop("vth_hi", 10)
+        )
 
         self.theta = Var(
             shape=(shape_hess[0], 1),
@@ -579,6 +588,8 @@ class GradientDynamics(AbstractProcess):
         self.sN_synops = Var(shape=(1, 1), init=0)
         self.sN_neurops = Var(shape=(1, 1), init=0)
         self.sN_spikeops = Var(shape=(1, 1), init=0)
+
+
 class OutProbeProcess(AbstractProcess):
     def __init__(self, **kwargs):
         """Use to set read output spike from a process
@@ -594,4 +605,4 @@ class OutProbeProcess(AbstractProcess):
         self.s_in = InPort(shape=shape)
         var_shape = (iterations, shape[0])
         self.sol_list = Var(shape=var_shape, init=np.zeros(var_shape))
-        self.it_counter = Var(shape=(1,1), init=0)
+        self.it_counter = Var(shape=(1, 1), init=0)
