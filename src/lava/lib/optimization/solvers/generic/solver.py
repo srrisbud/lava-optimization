@@ -248,6 +248,7 @@ class OptimizationSolver:
                          BoltzmannAbstractModel,
                      Boltzmann: BoltzmannFixed,
                      QuboScif: PyModelQuboScifFixed
+                     # QuboScif: PyModelQuboScifRefracFixed
                      }
             return Loihi1SimCfg(exception_proc_model_map=pdict,
                                 select_sub_proc_model=True)

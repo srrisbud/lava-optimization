@@ -184,7 +184,8 @@ class TestWorkloads(unittest.TestCase):
                       [0, 0, 5, -6]])
         reference_solution = np.asarray([1, 0, 0, 1]).astype(int)
         solution, cost, expected_cost = solve_workload(q, reference_solution,
-                                                       noise_precision=5)
+                                                       noise_precision=5,
+                                                       sustained_on_tau=-3)
         print(solution)
         self.assertEqual(cost, expected_cost)
 
