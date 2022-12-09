@@ -28,6 +28,7 @@ class PyModelAbstractScifFixed(PyLoihiProcessModel):
     cnstr_intg: np.ndarray = LavaPyType(np.ndarray, int, precision=24)
     state: np.ndarray = LavaPyType(np.ndarray, int, precision=24)
     spk_hist: np.ndarray = LavaPyType(np.ndarray, int, precision=8)
+    state_hist: np.ndarray = LavaPyType(np.ndarray, int, precision=8)
 
     step_size: np.ndarray = LavaPyType(np.ndarray, int, precision=24)
     theta: np.ndarray = LavaPyType(np.ndarray, int, precision=24)
@@ -96,9 +97,10 @@ class PyModelAbstractScifFixed(PyLoihiProcessModel):
         self.spk_hist <<= 2
         self.spk_hist &= 0xFF  # AND with 0xFF retains 8 LSBs
 
-        return spk_hist_buffer
+        return state_hist_buffer
 
     # This method is overloaded for CSP and QUBO
+
     def _get_local_validity_conflict(self, spk_hist_status):
         """Method for checking local conflict of a neuron and its incoming
         connections.
@@ -249,6 +251,7 @@ class PyModelAbstractScifFixed(PyLoihiProcessModel):
         """
         # Indices of WTA neurons signifying unsatisfied constraints, based on
         # buffered history from previous timestep
+
         # indices of neurons to be integrated:
         intg_idx = np.where(self.state >= 0)
         # indices of neurons in refractory:
@@ -473,6 +476,7 @@ class PyModelQuboScifRefracFixed(PyLoihiProcessModel):
         # Compute the local cost
         s_sig[sig_spk_idx] = self.cost_diagonal[sig_spk_idx] + \
             self.a_in_data[sig_spk_idx]
+        print(f"{s_sig=}")
 
         return s_sig
 
