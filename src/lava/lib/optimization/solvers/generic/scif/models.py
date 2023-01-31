@@ -474,7 +474,6 @@ class PyModelQuboScifRefracFixed(PyLoihiProcessModel):
         # Compute the local cost
         s_sig[sig_spk_idx] = self.cost_diagonal[sig_spk_idx] + \
             self.a_in_data[sig_spk_idx]
-        print(f"{s_sig=}")
 
         return s_sig
 
