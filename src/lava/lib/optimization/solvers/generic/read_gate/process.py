@@ -59,7 +59,7 @@ class ReadGate(AbstractProcess):
         )
         self.target_cost = Var(shape=(1,), init=target_cost)
 
-        self.best_solution = Var(shape=shape, init=-1)
+        self.acknowledgment_in = InPort(shape=(1,))
         for id in range(num_in_ports):
             # Cost is transferred as two separate values
             # cost_last_bytes = last 3 byte of cost

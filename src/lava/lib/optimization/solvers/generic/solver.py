@@ -5,6 +5,7 @@
 import typing as ty
 import numpy as np
 
+from enum import Enum
 from dataclasses import dataclass
 import warnings
 
@@ -46,7 +47,10 @@ from lava.lib.optimization.solvers.generic.hierarchical_processes import (
     SimulatedAnnealingLocalAbstract,
 )
 from lava.lib.optimization.solvers.generic.monitoring_processes. \
+    solution_readout.process import SolutionReadout
+from lava.lib.optimization.solvers.generic.monitoring_processes. \
     solution_readout.models import (
+        SolutionReadoutAsyncPyModel,
         SolutionReadoutPyModel,
     )
 from lava.lib.optimization.solvers.generic.nebm.models import NEBMPyModel
@@ -82,7 +86,7 @@ try:
         AnnealingNcModel,
     )
     from lava.lib.optimization.solvers.generic.read_gate.ncmodels import (
-        ReadGateCModel,
+        ReadGateCModel, ReadGateCModelMultiChip
     )
 
     from lava.lib.optimization.solvers.generic.qp.ncmodels import (
@@ -95,6 +99,9 @@ try:
 except ImportError:
 
     class ReadGateCModel:
+        pass
+
+    class ReadGateCModelMultiChip:
         pass
 
     class NcModelDense:
@@ -113,6 +120,9 @@ except ImportError:
         pass
 
     class CostIntegratorNcModel:
+        pass
+
+    class DiscreteVariablesModel:
         pass
 
     class NcModelSparse:
@@ -144,6 +154,12 @@ backend = Loihi2NeuroCore
 backend = NeuroCoreS
 The explicit resource classes can be imported from
 lava.magma.core.resources"""
+
+
+class ReadoutMode(Enum):
+    SINGLE_CHIP = 1
+    MULTI_CHIP_TARGET = 2
+    MULTI_CHIP_STREAMING = 3
 
 
 @dataclass
@@ -196,6 +212,7 @@ class SolverConfig:
     probe_energy: bool = False
     log_level: int = 40
     folded_compilation: bool = False
+    readout_mode: ReadoutMode = ReadoutMode.SINGLE_CHIP
 
 
 @dataclass(frozen=True)
@@ -298,7 +315,7 @@ class OptimizationSolver:
         run_condition, run_cfg = self._prepare_solver(config)
         folded_compile_config = None
         if config.folded_compilation:
-            folded_compile_config = {'folded_view' : ['SolutionFinder']}
+            folded_compile_config = {'folded_view': ['SolutionFinder']}
         self.solver_process.run(condition=run_condition, run_cfg=run_cfg,
                                 compile_config=folded_compile_config)
         best_state, best_cost, best_timestep = self._get_results(config)
@@ -309,10 +326,10 @@ class OptimizationSolver:
             best_cost=best_cost,
             best_state=best_state,
             best_timestep=best_timestep,
-            solver_config=config,
-            profiler=self._profiler,
             cost_timeseries=cost_timeseries,
             state_timeseries=state_timeseries,
+            solver_config=config,
+            profiler=self._profiler
         )
 
     def _prepare_solver(self, config: SolverConfig):
@@ -360,6 +377,7 @@ class OptimizationSolver:
                 probes.append(self._state_tracker)
         run_cfg = self._get_run_config(
             backend=config.backend,
+            readout_mode=config.readout_mode,
             probes=probes,
             num_in_ports=num_in_ports,
         )
@@ -461,7 +479,10 @@ class OptimizationSolver:
             return tracker.time_series
 
     def _get_run_config(
-        self, backend: BACKENDS, probes=None, num_in_ports: int = None
+        self, backend: BACKENDS,
+            readout_mode: ReadoutMode = ReadoutMode.SINGLE_CHIP,
+            probes=None,
+            num_in_ports: int = None
     ):
         from lava.lib.optimization.solvers.generic.read_gate.process import (
             ReadGate
@@ -482,13 +503,13 @@ class OptimizationSolver:
                 QuboScif: PyModelQuboScifFixed,
                 ProportionalIntegralNeuronsPIPGeq: PyPIneurPIPGeqModel,
                 ProjectedGradientNeuronsPIPGeq: PyProjGradPIPGeqModel,
+                SolutionReadout: SolutionReadoutPyModel
             }
             return Loihi1SimCfg(exception_proc_model_map=pdict,
                                 select_sub_proc_model=True)
         elif backend in NEUROCORES:
             pdict = {
                 self.solver_process: self.solver_model,
-                ReadGate: ReadGateCModel,
                 Dense: NcModelDense,
                 Sparse: NcModelSparse,
                 NEBMAbstract: NEBMAbstractModel,
@@ -503,6 +524,12 @@ class OptimizationSolver:
                 ProportionalIntegralNeuronsPIPGeq: NcL2ModelPI,
                 ProjectedGradientNeuronsPIPGeq: NcL2ModelPG,
             }
+            if readout_mode is ReadoutMode.SINGLE_CHIP:
+                pdict.update({ReadGate: ReadGateCModel,
+                              SolutionReadout: SolutionReadoutPyModel})
+            if readout_mode is ReadoutMode.MULTI_CHIP_TARGET:
+                pdict.update({ReadGate: ReadGateCModelMultiChip,
+                              SolutionReadout: SolutionReadoutAsyncPyModel})
             return Loihi2HwCfg(
                 exception_proc_model_map=pdict,
                 select_sub_proc_model=True,
