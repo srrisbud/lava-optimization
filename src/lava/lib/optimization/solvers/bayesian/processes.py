@@ -72,6 +72,8 @@ class BayesianOptimizer(AbstractProcess):
         output_length: int = num_ss_dimensions
         self.results_in = InPort((input_length, 1))
         self.next_point_out = OutPort((output_length, 1))
+        self.next_point_buffer = Var(shape=(output_length, 1), init=np.zeros(
+            (output_length, 1)))
 
         # General Internal State Variables
         sorted_keys: list[str] = sorted(acq_func_config.keys())

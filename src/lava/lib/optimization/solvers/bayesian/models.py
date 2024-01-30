@@ -9,27 +9,32 @@ from skopt.space import Categorical, Integer, Real
 from typing import Union
 
 from lava.magma.core.decorator import implements, requires, tag
-from lava.magma.core.model.py.model import PyLoihiProcessModel
+from lava.magma.core.model.py.model import (PyLoihiProcessModel,
+                                            PyAsyncProcessModel)
 from lava.magma.core.model.py.ports import PyInPort, PyOutPort
 from lava.magma.core.model.py.type import LavaPyType
 from lava.magma.core.resources import CPU
 from lava.magma.core.sync.protocols.loihi_protocol import LoihiProtocol
+from lava.magma.core.sync.protocols.async_protocol import AsyncProtocol
 
 from lava.lib.optimization.solvers.bayesian.processes import (
     BayesianOptimizer
 )
 
 
-@implements(proc=BayesianOptimizer, protocol=LoihiProtocol)
+# @implements(proc=BayesianOptimizer, protocol=LoihiProtocol)
+@implements(proc=BayesianOptimizer, protocol=AsyncProtocol)
 @requires(CPU)
 @tag('floating_pt')
-class PyBayesianOptimizerModel(PyLoihiProcessModel):
+# class PyBayesianOptimizerModel(PyLoihiProcessModel):
+class PyBayesianOptimizerModel(PyAsyncProcessModel):
     """
     A Python-based implementation of the Bayesian Optimizer processes. For
     more information, please refer to bayesian/processes.py.
     """
     results_in: PyInPort = LavaPyType(PyInPort.VEC_DENSE, np.float64)
     next_point_out: PyOutPort = LavaPyType(PyOutPort.VEC_DENSE, np.float64)
+    next_point_buffer = LavaPyType(np.ndarray, np.ndarray)
 
     acq_func_config = LavaPyType(np.ndarray, np.ndarray)
     acq_opt_config = LavaPyType(np.ndarray, np.ndarray)
@@ -44,12 +49,17 @@ class PyBayesianOptimizerModel(PyLoihiProcessModel):
     num_iterations = LavaPyType(int, int)
     results_log = LavaPyType(np.ndarray, np.ndarray)
 
-    def run_spk(self) -> None:
+    # def run_spk(self) -> None:
+    def run_async(self) -> None:
         """tick the model forward by one time-step"""
-
+        print(f"Iter: {self.num_iterations} Init?: {self.initialized}")
+        print(f"Sending:\n{self.next_point_buffer}")
+        self.next_point_out.send(self.next_point_buffer)
         if self.initialized:
+            print("I'm initialized")
             # receive a result vector from the black-box function
             result_vec: np.ndarray = self.results_in.recv()
+            print(f"Got:\n{result_vec}\n======")
 
             opt_result: OptimizeResult = self.process_result_vector(
                 result_vec
@@ -78,8 +88,8 @@ class PyBayesianOptimizerModel(PyLoihiProcessModel):
             shape=(len(self.search_space), 1),
             buffer=np.array(next_point)
         )
+        self.next_point_buffer = next_point
 
-        self.next_point_out.send(next_point)
         self.num_iterations += 1
 
     def __del__(self) -> None:

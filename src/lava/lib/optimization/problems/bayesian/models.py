@@ -35,16 +35,17 @@ class PySingleInputFunctionModel(PyLoihiProcessModel):
 
     def run_spk(self) -> None:
         """tick the model forward by one time-step"""
+        output_length: int = self.num_params + self.num_objectives
+
         x = self.x_in.recv()
         y = math.cos(x) * math.sin(x) + (x * x / 25)
 
-        output_length: int = self.num_params + self.num_objectives
         output = np.ndarray(
             shape=(output_length, 1),
             buffer=np.array([x, y])
         )
-
         self.y_out.send(output)
+
 
 
 @implements(proc=DualInputFunction, protocol=LoihiProtocol)
@@ -74,5 +75,5 @@ class PyDualInputFunctionModel(PyLoihiProcessModel):
             shape=(output_length, 1),
             buffer=np.array([x[0], x[1], y])
         )
-
         self.y_out.send(output)
+
